@@ -1379,9 +1379,7 @@ function viewUpload(){
       '</label>'
       :
       '<div>' +
-        '<div class="note" style="margin-bottom:10px">Paste a link, get an MP3. Conversion runs on your own service ' +
-        '(a browser is not allowed to fetch audio from YouTube itself) — see <code>import-service/</code> to set it up.</div>' +
-        '<input type="text" class="inp" placeholder="Conversion service URL, e.g. https://your-service.example/import" value="' + esc(state.ytEndpoint) + '" data-field="ytEndpoint" style="margin-bottom:10px">' +
+        '<input type="text" class="inp" placeholder="Conversion service URL" value="' + esc(state.ytEndpoint) + '" data-field="ytEndpoint" style="margin-bottom:10px">' +
         '<input type="text" class="inp" placeholder="https://youtube.com/watch?v=..." value="' + esc(state.ytUrl) + '" data-field="ytUrl" style="margin-bottom:14px">' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
           '<button class="btn sm" data-act="importFromUrl" data-mode="download">Convert &amp; Download MP3</button>' +
