@@ -69,14 +69,38 @@ def friendly(err):
     return "Could not fetch that link. Check it is correct and public."
 
 
+# YouTube's bot detection mainly targets its "web" player client. The mobile and
+# TV clients are sometimes still served to datacenter IPs, so try them in turn
+# before giving up. Free, and it costs one extra request per failed client.
+PLAYER_CLIENTS = ["tv", "ios", "android", "mweb", "web"]
+
+
+def _client_opts(client):
+    return {"extractor_args": {"youtube": {"player_client": [client]}}} if client else {}
+
+
 def fetch(url):
     import yt_dlp
 
     with tempfile.TemporaryDirectory() as tmp:
         # Read metadata first so we can reject a very long track cheaply.
-        probe_opts = {"quiet": True, "no_warnings": True, "noplaylist": True, "skip_download": True}
-        with yt_dlp.YoutubeDL(probe_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        # Whichever client succeeds here is the one we download with.
+        info = None
+        working_client = None
+        last_err = None
+        for client in PLAYER_CLIENTS:
+            probe_opts = {"quiet": True, "no_warnings": True, "noplaylist": True,
+                          "skip_download": True, "socket_timeout": 15}
+            probe_opts.update(_client_opts(client))
+            try:
+                with yt_dlp.YoutubeDL(probe_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                working_client = client
+                break
+            except Exception as e:      # noqa: BLE001 - try the next client
+                last_err = e
+        if info is None:
+            raise last_err or ValueError("Could not read that link.")
 
         title = safe_name(info.get("title"))
         duration = int(info.get("duration") or 0)
@@ -98,6 +122,7 @@ def fetch(url):
             "socket_timeout": 20,
             "retries": 3,
         }
+        opts.update(_client_opts(working_client))
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
 

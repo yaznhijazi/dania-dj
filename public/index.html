@@ -120,6 +120,12 @@
   .chip{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--track);color:var(--muted);white-space:nowrap}
   .chip.demo{background:oklch(0.94 0.04 250);color:oklch(0.38 0.1 250)}
   .ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* looks like text until you hover or focus it */
+  .edit-inline{font:inherit;color:inherit;width:100%;background:transparent;border:1px solid transparent;
+    border-radius:6px;padding:3px 7px;margin:-3px -7px;transition:border-color .12s,background .12s}
+  .edit-inline:hover{border-color:var(--border2)}
+  .edit-inline:focus{border-color:var(--accent);background:#fff;outline:none}
+  .edit-inline::placeholder{color:oklch(0.75 0.01 60)}
   @media (max-width:820px){
     .sidebar{display:none}
     .grid2{grid-template-columns:1fr}
@@ -919,7 +925,7 @@ const actions = {
     const d = prompt('Event date', p.date); if (d != null) p.date = d.trim() || p.date;
     save();
   },
-  goSongs(){ state.screen = 'editor'; state.selection = null; },
+  goSongs(){ stopAll(); state.screen = 'editor'; state.selection = null; },
   goExport(){ stopAll(); state.screen = 'export'; },
   openTrack(id){ stopAll(); state.screen = 'track'; state.currentSongId = id; state.activeSongId = id; state.selection = null; },
   openTransition(i){ stopAll(); state.screen = 'transition'; state.transitionIndex = i; },
@@ -1047,7 +1053,7 @@ const actions = {
         state.exportLabel = label || '';
         paintExportProgress();
       });
-      const name = p.name.replace(/[^\w\-]+/g, '_').replace(/^_|_$/g, '') + '.' + res.ext;
+      const name = exportBaseName(p).replace(/[\\/:*?"<>|]+/g, '_') + '.' + res.ext;
       state.exportResult = { blob: res.blob, name, size: res.blob.size, seconds: res.seconds };
       state.exportState = 'done';
     } catch (e){
@@ -1068,6 +1074,9 @@ const actions = {
 function bars(peaks, cls){
   return peaks.map((h) => '<i style="height:' + Math.max(6, Math.round(h * 100)) + '%"></i>').join('');
 }
+const defaultExportName = (p) => (p.name || 'playlist').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'playlist';
+const exportBaseName = (p) => (p.exportName != null && p.exportName !== '') ? p.exportName : defaultExportName(p);
+
 function fileSize(bytes){
   if (bytes > 1024 * 1024 * 1024) return (bytes / 1073741824).toFixed(2) + ' GB';
   if (bytes > 1024 * 1024) return (bytes / 1048576).toFixed(1) + ' MB';
@@ -1177,6 +1186,16 @@ function viewTrack(){
   const endPct = (s.end / s.duration) * 100;
   const playing = state.player.kind === 'solo' && state.player.id === s.id;
 
+  // Spell out what each button will actually produce, so "keep" and "remove"
+  // can't be mixed up — this was a real source of confusion.
+  const selRange = state.selection;
+  const selA = selRange ? Math.min(selRange.a, selRange.b) : 0;
+  const selB = selRange ? Math.max(selRange.a, selRange.b) : 0;
+  const selLen = selB - selA;
+  const hasSel = !!selRange && selLen >= 0.15;
+  const keepLen = hasSel ? songDuration({ start: selA, end: selB, cuts: (s.cuts || []).filter((c) => c.start > selA && c.end < selB) }) : 0;
+  const removeLen = hasSel ? songDuration({ start: s.start, end: s.end, cuts: (s.cuts || []).concat([{ start: selA, end: selB }]) }) : 0;
+
   const cutEls = (s.cuts || []).map((c) =>
     '<div class="cut" style="left:' + (c.start / s.duration * 100) + '%;width:' + ((c.end - c.start) / s.duration * 100) + '%"></div>').join('');
   const sel = state.selection ?
@@ -1196,14 +1215,21 @@ function viewTrack(){
 
   return '<div style="max-width:860px;margin:0 auto;padding:40px 32px 140px">' +
     '<div class="back" data-act="goSongs"><span>&larr;</span><span>Songs</span></div>' +
-    '<div style="font-family:Lora,serif;font-weight:700;font-size:25px">' + esc(s.title) + '</div>' +
-    '<div style="font-size:13.5px;color:var(--muted);margin-top:4px;margin-bottom:28px">' + esc(s.artist) +
-      ' &middot; full length ' + fmt(s.duration) + (s.demo ? ' &middot; synthesized demo audio' : '') + '</div>' +
+    '<input class="edit-inline" data-song-field="title" value="' + esc(s.title) + '" placeholder="Song title" ' +
+      'style="font-family:Lora,serif;font-weight:700;font-size:25px">' +
+    '<div style="display:flex;align-items:center;gap:4px;margin-top:6px;margin-bottom:28px;flex-wrap:wrap">' +
+      '<input class="edit-inline" data-song-field="artist" value="' + esc(s.artist) + '" placeholder="Artist" ' +
+        'style="font-size:13.5px;color:var(--muted);max-width:260px">' +
+      '<span class="note" style="flex:0 0 auto">&middot; full length ' + fmt(s.duration) +
+        (s.demo ? ' &middot; synthesized demo audio' : '') + '</span>' +
+    '</div>' +
 
     '<div class="card" style="margin-bottom:22px">' +
       '<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-bottom:10px">' +
         '<span>Trim start <b id="lbl-start" style="color:var(--text)">' + fmt(s.start) + '</b></span>' +
-        '<span>Drag inside the wave to select a section</span>' +
+        '<span id="lbl-sel">' + (hasSel
+            ? 'Selected <b style="color:var(--accent)">' + fmt(selA) + ' – ' + fmt(selB) + '</b> &middot; ' + fmt(selLen)
+            : 'Drag inside the wave to select a section') + '</span>' +
         '<span>Trim end <b id="lbl-end" style="color:var(--text)">' + fmt(s.end) + '</b></span>' +
       '</div>' +
       '<div class="wave-box" id="wave">' +
@@ -1219,11 +1245,16 @@ function viewTrack(){
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;gap:10px;flex-wrap:wrap">' +
         '<div style="font-size:13px;color:var(--muted)">Trimmed length: <strong style="color:var(--text)" id="lbl-trimmed">' + fmt(songDuration(s)) + '</strong></div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-          '<button class="btn sm" data-act="cropToSelection" title="Throw away everything outside the selection. Edits this track, does not copy it.">Keep only selection</button>' +
-          '<button class="btn sm ghost" data-act="cutSelection" title="Remove the selected part from the middle and close the gap">Remove selection</button>' +
+          '<button class="btn sm" data-act="cropToSelection"' + (hasSel ? '' : ' disabled') +
+            ' title="Throw away everything outside the selection. Edits this track, does not copy it.">' +
+            'Keep only selection' + (hasSel ? ' &middot; ' + fmt(keepLen) : '') + '</button>' +
+          '<button class="btn sm ghost" data-act="cutSelection"' + (hasSel ? '' : ' disabled') +
+            ' title="Delete the selected part and close the gap — the opposite of Keep">' +
+            'Delete selection' + (hasSel ? ' &middot; leaves ' + fmt(removeLen) : '') + '</button>' +
           '<button class="btn sm ghost" data-act="splitSong" data-id="' + s.id + '" title="Break this track into TWO separate tracks at the selection point">Split into 2 tracks</button>' +
           '<button class="btn sm ghost" data-act="resetTrim">Reset</button>' +
-          '<button class="btn sm" data-act="togglePlaySong" data-id="' + s.id + '">' + (playing ? PAUSE : PLAY) + ' Preview</button>' +
+          '<button class="btn sm" data-act="togglePlaySong" data-id="' + s.id + '">' +
+            (playing ? PAUSE + ' Pause' : PLAY + ' Preview') + '</button>' +
         '</div>' +
       '</div>' +
     '</div>' +
@@ -1357,6 +1388,13 @@ function viewExport(){
     '<div class="card" style="margin-bottom:22px">' +
       '<div class="lbl" style="margin-bottom:14px">Export Format</div>' +
       '<div style="display:flex;flex-direction:column;gap:10px">' + rows + '</div>' +
+    '</div>' +
+    '<div class="card" style="margin-bottom:22px">' +
+      '<div class="lbl">File name</div>' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+        '<input type="text" class="inp" data-export-name value="' + esc(exportBaseName(p)) + '" placeholder="' + esc(defaultExportName(p)) + '" style="flex:1">' +
+        '<span class="note" style="flex:0 0 auto">.' + (state.exportFormat === 'wav' ? 'wav' : 'mp3') + '</span>' +
+      '</div>' +
     '</div>' + action +
   '</div>';
 }
@@ -1446,8 +1484,12 @@ function render(){
       '<div class="body">' +
         (inPl ?
           '<div class="sidebar">' +
-            '<div><div style="font-family:Lora,serif;font-weight:600;font-size:17px;line-height:1.3">' + esc(p.name) + '</div>' +
-            '<div style="font-size:12px;color:var(--muted);margin-top:4px">' + esc(p.date) + '</div></div>' +
+            '<div>' +
+              '<input class="edit-inline" data-pl-field="name" value="' + esc(p.name) + '" placeholder="Playlist name" ' +
+                'style="font-family:Lora,serif;font-weight:600;font-size:17px;line-height:1.3">' +
+              '<input class="edit-inline" data-pl-field="date" value="' + esc(p.date) + '" placeholder="Event date" ' +
+                'style="font-size:12px;color:var(--muted);margin-top:6px">' +
+            '</div>' +
             '<div style="display:flex;flex-direction:column;gap:4px">' +
               '<div class="nav-item ' + (songsActive ? 'active' : '') + '" data-act="goSongs">Songs</div>' +
               '<div class="nav-item ' + (state.screen === 'export' ? 'active' : '') + '" data-act="goExport">Export</div>' +
@@ -1557,6 +1599,41 @@ function wire(){
   if (sel) sel.addEventListener('change', () => { updateSong(state.currentSongId, { eq: sel.value }); stopAll(); render(); });
   const chk = document.querySelector('[data-check="normalize"]');
   if (chk) chk.addEventListener('change', () => { updateSong(state.currentSongId, { normalize: chk.checked }); render(); });
+
+  // inline renaming: song title/artist, playlist name/date, export file name.
+  // Enter commits (blur fires change); blank reverts rather than wiping the name.
+  const commitOnEnter = (inp) => inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter'){ e.preventDefault(); inp.blur(); }
+    if (e.key === 'Escape'){ inp.value = inp.dataset.prev || inp.value; inp.blur(); }
+  });
+  document.querySelectorAll('[data-song-field]').forEach((inp) => {
+    inp.dataset.prev = inp.value; commitOnEnter(inp);
+    inp.addEventListener('change', () => {
+      const s = songById(state.currentSongId); if (!s) return;
+      const v = inp.value.trim();
+      if (!v){ inp.value = s[inp.dataset.songField]; return; }
+      updateSong(s.id, { [inp.dataset.songField]: v });
+      render();
+    });
+  });
+  document.querySelectorAll('[data-pl-field]').forEach((inp) => {
+    inp.dataset.prev = inp.value; commitOnEnter(inp);
+    inp.addEventListener('change', () => {
+      const p = playlist(); if (!p) return;
+      const v = inp.value.trim();
+      if (!v){ inp.value = p[inp.dataset.plField]; return; }
+      p[inp.dataset.plField] = v; save(); render();
+    });
+  });
+  const expName = document.querySelector('[data-export-name]');
+  if (expName){
+    commitOnEnter(expName);
+    expName.addEventListener('change', () => {
+      const p = playlist(); if (!p) return;
+      p.exportName = expName.value.trim();     // blank falls back to the playlist name
+      save(); render();
+    });
+  }
 
   document.querySelectorAll('[data-field]').forEach((inp) => {
     inp.addEventListener('input', () => { state[inp.dataset.field] = inp.value; if (inp.dataset.field === 'ytEndpoint') save(); });
