@@ -302,41 +302,11 @@ function songKey(s){
 }
 function trim(map, max){ while (map.size > max) map.delete(map.keys().next().value); }
 
-/* Synthesized stand-in audio for the demo tracks, so every feature
-   (preview, crossfade, export) works before the user uploads anything. */
-function synthBuffer(song){
-  const c = ac();
-  const n = Math.ceil(song.duration * SR);
-  const buf = c.createBuffer(2, n, SR);
-  const rnd = mulberry32(seedFromString(song.title + song.artist));
-  const root = 110 * Math.pow(2, Math.floor(rnd() * 12) / 12);
-  const chord = [1, 1.25, 1.5, 2];                        // major triad + octave
-  const bpm = 92 + Math.floor(rnd() * 40);
-  const beat = 60 / bpm;
-  const L = buf.getChannelData(0), R = buf.getChannelData(1);
-  for (let i = 0; i < n; i++){
-    const t = i / SR;
-    let v = 0;
-    for (let k = 0; k < chord.length; k++){
-      const f = root * chord[k] * (k === 3 ? 2 : 1);
-      v += Math.sin(2 * Math.PI * f * t) * (0.16 / (k + 1));
-    }
-    const ph = (t % beat) / beat;                          // kick
-    v += Math.sin(2 * Math.PI * (55 + 40 * Math.exp(-ph * 18)) * t) * 0.30 * Math.exp(-ph * 9);
-    const bar = (t % (beat * 4)) / (beat * 4);             // gentle 4-bar swell
-    v *= 0.75 + 0.25 * Math.sin(bar * Math.PI);
-    L[i] = clamp(v * 0.9, -1, 1);
-    R[i] = clamp(v * 0.9 * (1 - 0.06 * Math.sin(t * 0.7)), -1, 1);
-  }
-  return buf;
-}
-
 async function sourceBuffer(song){
-  if (song.demo || !song.srcId){
+  if (!song.srcId){
+    // decoded but never persisted (storage was unavailable) — good for this session only
     if (rawCache.has(song.id)) return rawCache.get(song.id);
-    const b = synthBuffer(song);
-    rawCache.set(song.id, b); trim(rawCache, RAW_MAX);
-    return b;
+    throw new Error('"' + song.title + '" has no stored audio. Add the file again.');
   }
   if (rawCache.has(song.srcId)) return rawCache.get(song.srcId);
   const bytes = await idbGet(song.srcId);
@@ -748,25 +718,6 @@ const LS_KEY = 'dania-dj.v1';
    field blank to use it; fill it in only to point at your own service. */
 const DEFAULT_ENDPOINT = '/api/import';
 
-function demoPlaylists(){
-  // Demo tracks use synthesized audio and are kept short so the whole
-  // pipeline (preview, crossfade, export) is exercisable out of the box.
-  const d = (t, a, sec) => makeSong(t, a, sec, { demo: true });
-  return [
-    { id: uid(), name: 'Sarah & Mike — Reception', date: 'Oct 12, 2026', songs: [
-      d('Perfect', 'Ed Sheeran', 34), d('At Last', 'Etta James', 30),
-      d('Marry You', 'Bruno Mars', 32), d('All of Me', 'John Legend', 36),
-      d("Signed, Sealed, Delivered I'm Yours", 'Stevie Wonder', 28),
-      d('September', 'Earth, Wind & Fire', 33), d('Uptown Funk', 'Mark Ronson ft. Bruno Mars', 35),
-      d('I Wanna Dance with Somebody', 'Whitney Houston', 31),
-      d("Can't Stop the Feeling!", 'Justin Timberlake', 29), d("Don't Stop Believin'", 'Journey', 34),
-    ] },
-    { id: uid(), name: 'Emma & Jake — Cocktail Hour', date: 'Nov 2, 2026', songs: [
-      d('La Vie en Rose', 'Édith Piaf', 30), d('Come Away with Me', 'Norah Jones', 28),
-      d("Isn't She Lovely", 'Stevie Wonder', 32),
-    ] },
-  ];
-}
 
 let state = {
   screen: 'dashboard',
@@ -816,6 +767,9 @@ function load(){
     state.exportFormat = raw.exportFormat || 'mp3-320';
     state.ytEndpoint = raw.ytEndpoint || '';
     // rebuild anything the schema needs
+    // strip the old synthesized sample tracks, and any playlist made only of them
+    state.playlists.forEach((p) => { p.songs = p.songs.filter((s) => !s.demo); });
+    state.playlists = state.playlists.filter((p) => p.songs.length > 0);
     state.playlists.forEach((p) => p.songs.forEach((s) => {
       s.cuts = s.cuts || []; s.curve = s.curve || 'smooth'; s.peaks = s.peaks || makeWave(s.title, 96);
     }));
@@ -834,7 +788,7 @@ function load(){
       state.screen = ok && valid ? ui.screen : 'editor';
     }
   } else {
-    state.playlists = demoPlaylists();
+    state.playlists = [];          // start empty — no sample data
   }
   // ask the browser not to evict our uploaded audio under storage pressure
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
@@ -1119,6 +1073,11 @@ function viewDashboard(){
       '<div><div class="h1">Your Playlists</div><div class="sub">Build seamless wedding mixes, ready to export.</div></div>' +
       '<button class="btn" data-act="newPlaylist">+ New Playlist</button>' +
     '</div>' +
+    (state.playlists.length ? '' :
+      '<div class="dashed" style="padding:44px 24px;text-align:center;color:var(--muted);margin-bottom:20px">' +
+        '<div style="font-size:14.5px">No playlists yet.</div>' +
+        '<div class="note" style="margin-top:6px">Create one, then add your MP3 files to start building the mix.</div>' +
+      '</div>') +
     '<div class="grid-cards">' + cards +
       '<div class="dashed" style="padding:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:150px;cursor:pointer;color:var(--muted)" data-act="newPlaylist">' +
         '<div style="font-size:28px;font-weight:300;color:var(--accent)">+</div>' +
@@ -1155,7 +1114,6 @@ function viewEditor(){
         '<button class="play-circle" data-act="togglePlaySong" data-id="' + s.id + '" data-stop="1">' + (playing ? PAUSE : PLAY) + '</button>' +
         '<div style="flex:1 1 auto;min-width:0;cursor:pointer" data-act="openTrack" data-id="' + s.id + '">' +
           '<div style="font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:8px"><span class="ell">' + esc(s.title) + '</span>' +
-            (s.demo ? '<span class="chip demo">demo tone</span>' : '') +
             (s.cuts && s.cuts.length ? '<span class="chip">' + s.cuts.length + ' cut' + (s.cuts.length > 1 ? 's' : '') + '</span>' : '') +
           '</div>' +
           '<div style="font-size:12.5px;color:var(--muted)" class="ell">' + esc(s.artist) + '</div>' +
@@ -1223,7 +1181,7 @@ function viewTrack(){
       '<input class="edit-inline" data-song-field="artist" value="' + esc(s.artist) + '" placeholder="Artist" ' +
         'style="font-size:13.5px;color:var(--muted);max-width:260px">' +
       '<span class="note" style="flex:0 0 auto">&middot; full length ' + fmt(s.duration) +
-        (s.demo ? ' &middot; synthesized demo audio' : '') + '</span>' +
+        '</span>' +
     '</div>' +
 
     '<div class="card" style="margin-bottom:22px">' +
