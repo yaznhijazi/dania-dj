@@ -697,6 +697,10 @@ function download(blob, name){
    State + persistence
    ========================================================================== */
 const LS_KEY = 'dania-dj.v1';
+/* Ships with the Vercel deployment as a Python serverless function (api/import.py).
+   Same origin, so no CORS and nothing for the user to configure. Leave the service
+   field blank to use it; fill it in only to point at your own service. */
+const DEFAULT_ENDPOINT = '/api/import';
 
 function demoPlaylists(){
   // Demo tracks use synthesized audio and are kept short so the whole
@@ -843,11 +847,9 @@ async function importFromUrl(mode){
   const pl = playlist(); if (!pl) return;
   const url = state.ytUrl.trim();
   if (!url) { toast('Paste a link first.'); return; }
-  const endpoint = state.ytEndpoint.trim();
-  if (!endpoint){
-    toast('No conversion service set — see the setup note in this tab. Until then, convert the track yourself and use the Upload audio tab.', 6000);
-    return;
-  }
+  // Default to the built-in /api/import function that ships with the Vercel
+  // deployment. Only a custom service needs the field filled in.
+  const endpoint = state.ytEndpoint.trim() || DEFAULT_ENDPOINT;
   state.uploadOpen = false;
   state.busy = 'Converting to MP3… this can take a minute for a long track';
   render();
@@ -1379,22 +1381,20 @@ function viewUpload(){
       '</label>'
       :
       '<div>' +
-        // once a service is configured, get it out of the way — paste a link and go
-        (state.ytEndpoint.trim() && !state.editEndpoint
-          ? '<div class="note" style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
-              '<span style="color:oklch(0.55 0.13 145)">&#9679;</span>' +
-              '<span class="ell" style="flex:1">' + esc(state.ytEndpoint.replace(/^https?:\/\//, '')) + '</span>' +
-              '<span data-act="editEndpoint" style="cursor:pointer;text-decoration:underline;flex:0 0 auto">change</span>' +
-            '</div>'
-          : '<input type="text" class="inp" placeholder="Conversion service URL" value="' + esc(state.ytEndpoint) + '" data-field="ytEndpoint" style="margin-bottom:10px">') +
         '<input type="text" class="inp" placeholder="https://youtube.com/watch?v=..." value="' + esc(state.ytUrl) + '" data-field="ytUrl" style="margin-bottom:14px">' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-          '<button class="btn sm" data-act="importFromUrl" data-mode="download">Convert &amp; Download MP3</button>' +
+          '<button class="btn sm" data-act="importFromUrl" data-mode="download">Convert &amp; Download</button>' +
           '<button class="btn sm ghost" data-act="importFromUrl" data-mode="add">Add straight to playlist</button>' +
         '</div>' +
-        '<div class="note" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' +
-          'No service running? Convert the track with whatever tool you already use and add the MP3 on the ' +
-          '<b>Upload audio</b> tab — it behaves identically.</div>' +
+        // the built-in converter is used unless you point at your own service
+        (state.editEndpoint
+          ? '<input type="text" class="inp" placeholder="Custom service URL (leave blank for built-in)" value="' + esc(state.ytEndpoint) + '" data-field="ytEndpoint" style="margin-top:14px">'
+          : '<div class="note" style="margin-top:14px;display:flex;align-items:center;gap:8px">' +
+              '<span class="ell" style="flex:1">' +
+                (state.ytEndpoint.trim() ? 'Using ' + esc(state.ytEndpoint.replace(/^https?:\/\//, '')) : 'Using the built-in converter') +
+              '</span>' +
+              '<span data-act="editEndpoint" style="cursor:pointer;text-decoration:underline;flex:0 0 auto">change</span>' +
+            '</div>') +
       '</div>') +
   '</div></div>';
 }

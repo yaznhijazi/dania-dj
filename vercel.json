@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
+  "functions": {
+    "api/import.py": { "maxDuration": 60, "memory": 1024 }
+  },
   "headers": [
     {
       "source": "/(.*)",
