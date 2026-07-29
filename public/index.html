@@ -395,16 +395,47 @@ function peakOf(buf){
   return p || 1;
 }
 
-/* fully prepared, per-song audio: trimmed, cut, EQ'd, at project sample rate */
+/* peak of one region, sampled — avoids scanning millions of frames */
+const peakRangeCache = new Map();
+function peakOfRange(buf, a, b){
+  const key = buf.length + ':' + a.toFixed(2) + ':' + b.toFixed(2);
+  if (peakRangeCache.has(key)) return peakRangeCache.get(key);
+  const sr = buf.sampleRate;
+  const i0 = Math.max(0, Math.round(a * sr)), i1 = Math.min(buf.length, Math.round(b * sr));
+  const step = Math.max(1, Math.floor((i1 - i0) / 20000));   // ~20k probes is plenty
+  let p = 0;
+  for (let k = 0; k < buf.numberOfChannels; k++){
+    const d = buf.getChannelData(k);
+    for (let i = i0; i < i1; i += step){ const v = Math.abs(d[i]); if (v > p) p = v; }
+  }
+  p = p || 1;
+  if (peakRangeCache.size > 200) peakRangeCache.clear();
+  peakRangeCache.set(key, p);
+  return p;
+}
+
+/* Per-song audio ready to play: trimmed, cut, EQ'd.
+   Fast path — a plain trim with no cuts and no EQ needs no sample copying at
+   all, so we hand back the decoded source plus an offset and let the audio
+   graph read the region directly. Copying a 5-minute track was costing ~200 ms
+   of blocked main thread on every single press. */
 async function songAudio(song){
-  const key = songKey(song);
-  if (bufCache.has(key)) { const v = bufCache.get(key); bufCache.delete(key); bufCache.set(key, v); return v; }
   const src = await sourceBuffer(song);
   const regions = keptRegions(song).map(([a, b]) => [clamp(a, 0, src.duration), clamp(b, 0, src.duration)]);
+  if (!regions.length) throw new Error('"' + song.title + '" has no audio left after trimming.');
+
+  const eqBands = (EQ_PRESETS[song.eq] || EQ_PRESETS.none).bands;
+  if (regions.length === 1 && !eqBands.length){
+    const [a, b] = regions[0];
+    return { buffer: src, offset: a, dur: b - a, peak: peakOfRange(src, a, b) };
+  }
+
+  const key = songKey(song);
+  if (bufCache.has(key)) { const v = bufCache.get(key); bufCache.delete(key); bufCache.set(key, v); return v; }
   const spliced = spliceRegions(src, regions);
   if (!spliced) throw new Error('"' + song.title + '" has no audio left after trimming.');
   const buffer = await applyEq(spliced, song.eq);
-  const entry = { buffer, peak: peakOf(buffer), dur: buffer.duration };
+  const entry = { buffer, offset: 0, peak: peakOfRange(buffer, 0, buffer.duration), dur: buffer.duration };
   bufCache.set(key, entry); trim(bufCache, CACHE_MAX);
   return entry;
 }
@@ -500,10 +531,10 @@ class MixPlayer {
           for (let k = 0; k < N; k++) a[k] = Math.max(0.0001, base * fadeShape(this.songs[i].curve, 1 - k / (N - 1)));
           g.gain.setValueCurveAtTime(a, startT + Math.max(0, remainToOut), fo);
         }
-        src.start(startT, offsetIntoSong);
+        src.start(startT, (entry.offset || 0) + offsetIntoSong, Math.max(0.05, dur - offsetIntoSong));
       } else {
         envelopeOn(g.gain, when, dur, fi, fo, base, this.songs[i].curve);
-        src.start(when);
+        src.start(when, entry.offset || 0, dur);
       }
       this.nodes.push(src, g);
     }
@@ -557,7 +588,7 @@ async function playSolo(song, fromFrac){
   } else {
     envelopeOn(g.gain, t0, dur, fi, fo, baseGain(song, entry.peak), song.curve);
   }
-  src.start(t0, from);
+  src.start(t0, (entry.offset || 0) + from, Math.max(0.05, dur - from));
   soloNodes = [src, g];
   soloInfo = { start: t0, from, dur };
   state.player = { kind: 'solo', id: song.id, pos: from, total: dur };
@@ -602,16 +633,25 @@ async function renderMixStreaming(songs, onChunk, onProgress){
       const sl = entry.buffer.getChannelData(0);
       const sr_ = entry.buffer.numberOfChannels > 1 ? entry.buffer.getChannelData(1) : sl;
       const startFrame = Math.round(m.t0 * SR);
+      // the fast path hands back the raw decoded buffer, which may sit at the
+      // device rate rather than SR — resample as we read
+      const ratio = entry.buffer.sampleRate / SR;
+      const offF = (entry.offset || 0) * entry.buffer.sampleRate;
+      const durFrames = Math.round(m.dur * SR);
       for (let j = 0; j < n; j++){
         const idx = written + j - startFrame;
-        if (idx < 0 || idx >= sl.length) continue;
+        if (idx < 0 || idx >= durFrames) continue;
+        const pos = offF + idx * ratio;
+        const i0 = Math.floor(pos);
+        if (i0 < 0 || i0 + 1 >= sl.length) continue;
+        const fr = pos - i0;
         const t = idx / SR;
         let env = 1;
         if (m.fi > 0.02 && t < m.fi) env = fadeShape(m.song.curve, t / m.fi);
         else if (m.fo > 0.02 && t > m.dur - m.fo) env = fadeShape(m.song.curve, Math.max(0, (m.dur - t) / m.fo));
         const g = m.base * env;
-        L[j] += sl[idx] * g;
-        R[j] += sr_[idx] * g;
+        L[j] += (sl[i0] + (sl[i0 + 1] - sl[i0]) * fr) * g;
+        R[j] += (sr_[i0] + (sr_[i0 + 1] - sr_[i0]) * fr) * g;
       }
     }
     for (let j = 0; j < n; j++){ L[j] = clamp(L[j], -1, 1); R[j] = clamp(R[j], -1, 1); }  // safety limiter
@@ -926,8 +966,20 @@ const actions = {
     save();
   },
   goSongs(){ stopAll(); state.screen = 'editor'; state.selection = null; },
+  /* Trim is applied live as the handles move; Save just confirms and goes back. */
+  saveTrack(){
+    const s = songById(state.currentSongId);
+    stopAll(); save();
+    state.screen = 'editor'; state.selection = null;
+    render();
+    if (s) toast('Saved &middot; ' + fmt(songDuration(s)));
+  },
   goExport(){ stopAll(); state.screen = 'export'; },
-  openTrack(id){ stopAll(); state.screen = 'track'; state.currentSongId = id; state.activeSongId = id; state.selection = null; },
+  openTrack(id){
+    stopAll(); state.screen = 'track'; state.currentSongId = id; state.activeSongId = id; state.selection = null;
+    // warm the decode now so the first Preview press starts instantly
+    const s = songById(id); if (s) songAudio(s).catch(() => {});
+  },
   openTransition(i){ stopAll(); state.screen = 'transition'; state.transitionIndex = i; },
   duplicateSong(id){
     const p = playlist(); const i = p.songs.findIndex((s) => s.id === id); if (i < 0) return;
@@ -940,44 +992,6 @@ const actions = {
     if (s.srcId && !state.playlists.some((pp) => pp.songs.some((x) => x.srcId === s.srcId))) await idbDel(s.srcId);
     if (state.activeSongId === id) state.activeSongId = p.songs[0] ? p.songs[0].id : null;
     stopAll(); save(); render();
-  },
-  splitSong(id){
-    const p = playlist(); const i = p.songs.findIndex((s) => s.id === id); if (i < 0) return;
-    const s = p.songs[i];
-    const mid = state.selection ? state.selection.a : (s.start + s.end) / 2;
-    if (mid <= s.start + 1 || mid >= s.end - 1) { toast('Pick a split point inside the trimmed region first.'); return; }
-    const a = JSON.parse(JSON.stringify(s)), b = JSON.parse(JSON.stringify(s));
-    a.id = uid(); b.id = uid();
-    a.end = mid; a.title = s.title + ' (1)'; a.cuts = (s.cuts || []).filter((c) => c.end <= mid);
-    b.start = mid; b.title = s.title + ' (2)'; b.cuts = (s.cuts || []).filter((c) => c.start >= mid);
-    a.fadeOut = 0; b.fadeIn = 0; a.crossfade = 0;
-    p.songs.splice(i, 1, a, b);
-    state.currentSongId = a.id; state.selection = null;
-    save(); render();
-    toast('Split into two sections — drag them anywhere in the playlist.');
-  },
-  /* "I only want this part of the song" — throw away everything outside the selection.
-     Does NOT create a second track; it edits this one in place. */
-  cropToSelection(){
-    const s = songById(state.currentSongId); const sel = state.selection;
-    if (!s || !sel || Math.abs(sel.b - sel.a) < 0.15){
-      toast('Drag across the waveform to select the part you want to keep, then press this.', 5000); return;
-    }
-    const a = Math.max(0, Math.min(sel.a, sel.b)), b = Math.min(s.duration, Math.max(sel.a, sel.b));
-    s.start = a; s.end = b;
-    s.cuts = (s.cuts || []).filter((c) => c.start > a && c.end < b);
-    state.selection = null; stopAll(); save(); render();
-    toast('Kept ' + fmt(b - a) + ' — everything else removed. No copy made.', 4500);
-  },
-  cutSelection(){
-    const s = songById(state.currentSongId); const sel = state.selection;
-    if (!s || !sel) { toast('Drag across the waveform to select a section first.'); return; }
-    const a = Math.min(sel.a, sel.b), b = Math.max(sel.a, sel.b);
-    if (b - a < 0.15) { toast('Selection is too short to remove.'); return; }
-    s.cuts = (s.cuts || []).concat([{ start: a, end: b }]);
-    if (songDuration(s) < 1){ s.cuts.pop(); toast('That would remove the whole track.'); return; }
-    state.selection = null; stopAll(); save(); render();
-    toast('Removed ' + fmt(b - a) + ' from the middle.');
   },
   clearCuts(){ const s = songById(state.currentSongId); if (!s) return; s.cuts = []; save(); render(); },
   removeCut(i){ const s = songById(state.currentSongId); if (!s) return; s.cuts.splice(i, 1); save(); render(); },
@@ -1186,21 +1200,9 @@ function viewTrack(){
   const endPct = (s.end / s.duration) * 100;
   const playing = state.player.kind === 'solo' && state.player.id === s.id;
 
-  // Spell out what each button will actually produce, so "keep" and "remove"
-  // can't be mixed up — this was a real source of confusion.
-  const selRange = state.selection;
-  const selA = selRange ? Math.min(selRange.a, selRange.b) : 0;
-  const selB = selRange ? Math.max(selRange.a, selRange.b) : 0;
-  const selLen = selB - selA;
-  const hasSel = !!selRange && selLen >= 0.15;
-  const keepLen = hasSel ? songDuration({ start: selA, end: selB, cuts: (s.cuts || []).filter((c) => c.start > selA && c.end < selB) }) : 0;
-  const removeLen = hasSel ? songDuration({ start: s.start, end: s.end, cuts: (s.cuts || []).concat([{ start: selA, end: selB }]) }) : 0;
 
   const cutEls = (s.cuts || []).map((c) =>
     '<div class="cut" style="left:' + (c.start / s.duration * 100) + '%;width:' + ((c.end - c.start) / s.duration * 100) + '%"></div>').join('');
-  const sel = state.selection ?
-    '<div class="sel" style="left:' + (Math.min(state.selection.a, state.selection.b) / s.duration * 100) + '%;width:' +
-      (Math.abs(state.selection.b - state.selection.a) / s.duration * 100) + '%"></div>' : '';
 
   const cutList = (s.cuts || []).length ?
     '<div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
@@ -1227,16 +1229,14 @@ function viewTrack(){
     '<div class="card" style="margin-bottom:22px">' +
       '<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-bottom:10px">' +
         '<span>Trim start <b id="lbl-start" style="color:var(--text)">' + fmt(s.start) + '</b></span>' +
-        '<span id="lbl-sel">' + (hasSel
-            ? 'Selected <b style="color:var(--accent)">' + fmt(selA) + ' – ' + fmt(selB) + '</b> &middot; ' + fmt(selLen)
-            : 'Drag inside the wave to select a section') + '</span>' +
+        '<span>Drag the two orange handles</span>' +
         '<span>Trim end <b id="lbl-end" style="color:var(--text)">' + fmt(s.end) + '</b></span>' +
       '</div>' +
       '<div class="wave-box" id="wave">' +
         '<div class="wave-bars">' + bars(s.peaks) + '</div>' +
         '<div class="veil" id="veil-a" style="left:0;width:' + startPct + '%"></div>' +
         '<div class="veil" id="veil-b" style="right:0;width:' + (100 - endPct) + '%"></div>' +
-        cutEls + sel +
+        cutEls +
         '<div class="playhead" id="wave-head" style="left:0;display:none"></div>' +
         '<div class="handle" id="h-start" style="left:' + startPct + '%"></div>' +
         '<div class="handle" id="h-end" style="left:' + endPct + '%"></div>' +
@@ -1244,17 +1244,11 @@ function viewTrack(){
       cutList +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;gap:10px;flex-wrap:wrap">' +
         '<div style="font-size:13px;color:var(--muted)">Trimmed length: <strong style="color:var(--text)" id="lbl-trimmed">' + fmt(songDuration(s)) + '</strong></div>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-          '<button class="btn sm" data-act="cropToSelection"' + (hasSel ? '' : ' disabled') +
-            ' title="Throw away everything outside the selection. Edits this track, does not copy it.">' +
-            'Keep only selection' + (hasSel ? ' &middot; ' + fmt(keepLen) : '') + '</button>' +
-          '<button class="btn sm ghost" data-act="cutSelection"' + (hasSel ? '' : ' disabled') +
-            ' title="Delete the selected part and close the gap — the opposite of Keep">' +
-            'Delete selection' + (hasSel ? ' &middot; leaves ' + fmt(removeLen) : '') + '</button>' +
-          '<button class="btn sm ghost" data-act="splitSong" data-id="' + s.id + '" title="Break this track into TWO separate tracks at the selection point">Split into 2 tracks</button>' +
-          '<button class="btn sm ghost" data-act="resetTrim">Reset</button>' +
-          '<button class="btn sm" data-act="togglePlaySong" data-id="' + s.id + '">' +
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          '<button class="btn sm ghost" data-act="togglePlaySong" data-id="' + s.id + '">' +
             (playing ? PAUSE + ' Pause' : PLAY + ' Preview') + '</button>' +
+          '<button class="btn sm" data-act="saveTrack">Save</button>' +
+          '<span class="note" data-act="resetTrim" style="cursor:pointer;text-decoration:underline">Reset</span>' +
         '</div>' +
       '</div>' +
     '</div>' +
@@ -1555,10 +1549,8 @@ document.addEventListener('click', (e) => {
     case 'openTransition': actions.openTransition(Number(el.dataset.i)); render(); break;
     case 'duplicateSong': actions.duplicateSong(el.dataset.id); render(); break;
     case 'removeSong': actions.removeSong(el.dataset.id); break;
-    case 'splitSong': actions.splitSong(el.dataset.id); break;
     case 'editEndpoint': state.editEndpoint = true; render(); break;
-    case 'cropToSelection': actions.cropToSelection(); break;
-    case 'cutSelection': actions.cutSelection(); break;
+    case 'saveTrack': actions.saveTrack(); break;
     case 'clearCuts': actions.clearCuts(); break;
     case 'removeCut': actions.removeCut(Number(el.dataset.i)); break;
     case 'resetTrim': actions.resetTrim(); break;
@@ -1687,7 +1679,7 @@ function wireWaveform(){
 
   const startDrag = (which) => (e) => {
     e.preventDefault(); e.stopPropagation();
-    box.setPointerCapture && box.setPointerCapture(e.pointerId);
+    try { box.setPointerCapture && box.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
     const move = (ev) => {
       const t = pctOf(ev.clientX) * s.duration;
       if (which === 'start') s.start = clamp(t, 0, s.end - 1);
@@ -1711,28 +1703,6 @@ function wireWaveform(){
   hs.addEventListener('pointerdown', startDrag('start'));
   he.addEventListener('pointerdown', startDrag('end'));
 
-  // drag across the body to select a region for removal / split
-  box.addEventListener('pointerdown', (e) => {
-    if (e.target === hs || e.target === he) return;
-    const a = pctOf(e.clientX) * s.duration;
-    state.selection = { a, b: a };
-    const move = (ev) => { state.selection.b = pctOf(ev.clientX) * s.duration; paintSelection(s); };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      if (Math.abs(state.selection.b - state.selection.a) < 0.1) state.selection = { a: state.selection.a, b: state.selection.a };
-      render();
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  });
-  function paintSelection(song){
-    let el = box.querySelector('.sel');
-    if (!el){ el = document.createElement('div'); el.className = 'sel'; box.appendChild(el); }
-    const a = Math.min(state.selection.a, state.selection.b), b = Math.max(state.selection.a, state.selection.b);
-    el.style.left = (a / song.duration * 100) + '%';
-    el.style.width = ((b - a) / song.duration * 100) + '%';
-  }
 }
 
 /* click the mini-player bar to seek */
