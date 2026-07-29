@@ -804,7 +804,7 @@ function updateSong(id, patch){
    ========================================================================== */
 async function addFiles(files){
   const pl = playlist(); if (!pl) return;
-  const list = Array.from(files).filter((f) => f.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac|opus)$/i.test(f.name));
+  const list = Array.from(files).filter((f) => f.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac|opus|webm|mp4)$/i.test(f.name));
   if (!list.length) { toast('No audio files found in that selection.'); return; }
   state.uploadOpen = false;
   state.busy = 'Importing 0/' + list.length; render();
@@ -862,8 +862,12 @@ async function importFromUrl(mode){
     }
     const blob = await res.blob();
     if (!blob.size) throw new Error('the service returned an empty file');
-    const title = (res.headers.get('X-Title') || 'Imported track').replace(/[\\/:*?"<>|]+/g, '_');
-    const name = title + '.mp3';
+    const title = decodeURIComponent(res.headers.get('X-Title') || 'Imported track').replace(/[\\/:*?"<>|]+/g, '_');
+    // the service may return .mp3, or the original .m4a/.webm when it has no ffmpeg —
+    // the browser decodes all of them, and export re-encodes to MP3 anyway
+    const name = res.headers.get('X-Filename')
+      ? decodeURIComponent(res.headers.get('X-Filename'))
+      : title + '.mp3';
     state.busy = null;
     if (mode === 'add'){
       await addFiles([new File([blob], name, { type: blob.type || 'audio/mpeg' })]);
@@ -943,6 +947,19 @@ const actions = {
     state.currentSongId = a.id; state.selection = null;
     save(); render();
     toast('Split into two sections — drag them anywhere in the playlist.');
+  },
+  /* "I only want this part of the song" — throw away everything outside the selection.
+     Does NOT create a second track; it edits this one in place. */
+  cropToSelection(){
+    const s = songById(state.currentSongId); const sel = state.selection;
+    if (!s || !sel || Math.abs(sel.b - sel.a) < 0.15){
+      toast('Drag across the waveform to select the part you want to keep, then press this.', 5000); return;
+    }
+    const a = Math.max(0, Math.min(sel.a, sel.b)), b = Math.min(s.duration, Math.max(sel.a, sel.b));
+    s.start = a; s.end = b;
+    s.cuts = (s.cuts || []).filter((c) => c.start > a && c.end < b);
+    state.selection = null; stopAll(); save(); render();
+    toast('Kept ' + fmt(b - a) + ' — everything else removed. No copy made.', 4500);
   },
   cutSelection(){
     const s = songById(state.currentSongId); const sel = state.selection;
@@ -1200,8 +1217,9 @@ function viewTrack(){
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;gap:10px;flex-wrap:wrap">' +
         '<div style="font-size:13px;color:var(--muted)">Trimmed length: <strong style="color:var(--text)" id="lbl-trimmed">' + fmt(songDuration(s)) + '</strong></div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-          '<button class="btn sm ghost" data-act="cutSelection">Remove selection</button>' +
-          '<button class="btn sm ghost" data-act="splitSong" data-id="' + s.id + '">Split here</button>' +
+          '<button class="btn sm" data-act="cropToSelection" title="Throw away everything outside the selection. Edits this track, does not copy it.">Keep only selection</button>' +
+          '<button class="btn sm ghost" data-act="cutSelection" title="Remove the selected part from the middle and close the gap">Remove selection</button>' +
+          '<button class="btn sm ghost" data-act="splitSong" data-id="' + s.id + '" title="Break this track into TWO separate tracks at the selection point">Split into 2 tracks</button>' +
           '<button class="btn sm ghost" data-act="resetTrim">Reset</button>' +
           '<button class="btn sm" data-act="togglePlaySong" data-id="' + s.id + '">' + (playing ? PAUSE : PLAY) + ' Preview</button>' +
         '</div>' +
@@ -1491,6 +1509,7 @@ document.addEventListener('click', (e) => {
     case 'duplicateSong': actions.duplicateSong(el.dataset.id); render(); break;
     case 'removeSong': actions.removeSong(el.dataset.id); break;
     case 'splitSong': actions.splitSong(el.dataset.id); break;
+    case 'cropToSelection': actions.cropToSelection(); break;
     case 'cutSelection': actions.cutSelection(); break;
     case 'clearCuts': actions.clearCuts(); break;
     case 'removeCut': actions.removeCut(Number(el.dataset.i)); break;

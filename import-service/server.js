@@ -33,7 +33,7 @@ const ALLOWED = (process.env.ALLOWED_ORIGINS || '*').split(',').map((s) => s.tri
 app.use(express.json({ limit: '8kb' }));
 app.use(cors({
   origin: ALLOWED.includes('*') ? true : ALLOWED,
-  exposedHeaders: ['X-Title', 'X-Duration'],   // the browser can't read these otherwise
+  exposedHeaders: ['X-Title', 'X-Filename', 'X-Duration'],   // the browser can't read these otherwise
 }));
 
 /* Only http(s), and never an address inside our own network. */
@@ -52,7 +52,21 @@ function assertSafeUrl(raw){
 
 const safeName = (s) => (s || 'Imported track').replace(/[\\/:*?"<>|\r\n]+/g, '_').trim().slice(0, 120) || 'Imported track';
 
-app.get('/health', (_req, res) => res.json({ ok: true }));
+/* FFmpeg is OPTIONAL. With it, you get an MP3. Without it, you get the original
+   audio stream (usually .m4a), which every browser decodes natively — and Dania DJ
+   re-encodes to MP3 at export time regardless, so the final mix is unaffected.
+   Managed/corporate machines often block ffmpeg, which is why this fallback exists. */
+let FFMPEG = null;
+async function hasFfmpeg(){
+  if (FFMPEG !== null) return FFMPEG;
+  try { await execFileP('ffmpeg', ['-version'], { timeout: 10_000 }); FFMPEG = true; }
+  catch { FFMPEG = false; console.warn('[dania] ffmpeg unavailable — serving original audio streams instead of MP3'); }
+  return FFMPEG;
+}
+const MIME = { mp3:'audio/mpeg', m4a:'audio/mp4', mp4:'audio/mp4', webm:'audio/webm',
+               opus:'audio/ogg', ogg:'audio/ogg', wav:'audio/wav', aac:'audio/aac' };
+
+app.get('/health', async (_req, res) => res.json({ ok: true, mp3: await hasFfmpeg() }));
 
 app.post('/import', async (req, res) => {
   let dir;
@@ -78,30 +92,29 @@ app.post('/import', async (req, res) => {
       return res.status(413).json({ error: `That track is ${Math.round(seconds / 60)} min; this service is capped at ${MAX_MINUTES} min.` });
     }
 
-    // 2. Download bestaudio and transcode to MP3.
+    // 2. Download the audio, transcoding to MP3 only if ffmpeg is actually usable.
+    const canTranscode = await hasFfmpeg();
     dir = await mkdtemp(path.join(tmpdir(), 'daniadj-'));
-    await execFileP('yt-dlp', [
-      '--no-playlist',
-      '-f', 'bestaudio/best',
-      '-x', '--audio-format', 'mp3',
-      '--audio-quality', BITRATE + 'K',
-      '--no-progress', '--no-warnings',
-      '-o', path.join(dir, 'audio.%(ext)s'),
-      url,
-    ], { timeout: TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 });
+    const args = ['--no-playlist', '-f', 'bestaudio/best'];
+    if (canTranscode) args.push('-x', '--audio-format', 'mp3', '--audio-quality', BITRATE + 'K');
+    args.push('--no-progress', '--no-warnings', '-o', path.join(dir, 'audio.%(ext)s'), url);
+    await execFileP('yt-dlp', args, { timeout: TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 });
 
     const files = await readdir(dir);
-    const mp3 = files.find((f) => f.endsWith('.mp3'));
-    if (!mp3) throw new Error('Conversion produced no audio file.');
+    const picked = files.find((f) => f.endsWith('.mp3')) || files.find((f) => /\.(m4a|webm|opus|ogg|aac|mp4|wav)$/i.test(f));
+    if (!picked) throw new Error('Download produced no audio file.');
 
-    const buf = await readFile(path.join(dir, mp3));
+    const ext = picked.split('.').pop().toLowerCase();
+    const buf = await readFile(path.join(dir, picked));
     if (buf.length > MAX_BYTES) return res.status(413).json({ error: 'Converted file is too large.' });
 
-    res.setHeader('Content-Type', 'audio/mpeg');
+    const filename = `${title.replace(/"/g, '')}.${ext}`;
+    res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
     res.setHeader('Content-Length', buf.length);
     res.setHeader('X-Title', encodeURIComponent(title).replace(/%20/g, ' '));
+    res.setHeader('X-Filename', encodeURIComponent(filename).replace(/%20/g, ' '));
     if (seconds) res.setHeader('X-Duration', String(Math.round(seconds)));
-    res.setHeader('Content-Disposition', `attachment; filename="${title.replace(/"/g, '')}.mp3"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.end(buf);
   } catch (err){
     const msg = err?.killed || /timeout/i.test(String(err?.message))
