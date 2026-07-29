@@ -725,7 +725,7 @@ let state = {
   currentSongId: null,
   activeSongId: null,
   transitionIndex: 0,
-  uploadOpen: false, uploadTab: 'file', ytUrl: '', ytEndpoint: '',
+  uploadOpen: false, uploadTab: 'file', ytUrl: '', ytEndpoint: '', editEndpoint: false,
   dragIndex: null, overIndex: null,
   player: { kind: null, id: null, pos: 0, total: 0 },
   selection: null,                          // {a,b} in source seconds, track editor
@@ -985,7 +985,7 @@ const actions = {
     p.songs.forEach((o) => { o.crossfade = s.crossfade; o.curve = s.curve; });
     save(); toast('Crossfade applied to every transition.');
   },
-  openUpload(){ state.uploadOpen = true; state.uploadTab = 'file'; },
+  openUpload(){ state.uploadOpen = true; state.uploadTab = 'file'; state.editEndpoint = false; },
   closeUpload(){ state.uploadOpen = false; },
   setTab(t){ state.uploadTab = t; },
   selectFormat(f){ state.exportFormat = f; state.exportState = 'idle'; state.exportResult = null; save(); },
@@ -1379,7 +1379,14 @@ function viewUpload(){
       '</label>'
       :
       '<div>' +
-        '<input type="text" class="inp" placeholder="Conversion service URL" value="' + esc(state.ytEndpoint) + '" data-field="ytEndpoint" style="margin-bottom:10px">' +
+        // once a service is configured, get it out of the way — paste a link and go
+        (state.ytEndpoint.trim() && !state.editEndpoint
+          ? '<div class="note" style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
+              '<span style="color:oklch(0.55 0.13 145)">&#9679;</span>' +
+              '<span class="ell" style="flex:1">' + esc(state.ytEndpoint.replace(/^https?:\/\//, '')) + '</span>' +
+              '<span data-act="editEndpoint" style="cursor:pointer;text-decoration:underline;flex:0 0 auto">change</span>' +
+            '</div>'
+          : '<input type="text" class="inp" placeholder="Conversion service URL" value="' + esc(state.ytEndpoint) + '" data-field="ytEndpoint" style="margin-bottom:10px">') +
         '<input type="text" class="inp" placeholder="https://youtube.com/watch?v=..." value="' + esc(state.ytUrl) + '" data-field="ytUrl" style="margin-bottom:14px">' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
           '<button class="btn sm" data-act="importFromUrl" data-mode="download">Convert &amp; Download MP3</button>' +
@@ -1507,6 +1514,7 @@ document.addEventListener('click', (e) => {
     case 'duplicateSong': actions.duplicateSong(el.dataset.id); render(); break;
     case 'removeSong': actions.removeSong(el.dataset.id); break;
     case 'splitSong': actions.splitSong(el.dataset.id); break;
+    case 'editEndpoint': state.editEndpoint = true; render(); break;
     case 'cropToSelection': actions.cropToSelection(); break;
     case 'cutSelection': actions.cutSelection(); break;
     case 'clearCuts': actions.clearCuts(); break;
