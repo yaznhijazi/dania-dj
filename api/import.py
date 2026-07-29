@@ -57,9 +57,14 @@ def friendly(err):
     m = str(err)
     low = m.lower()
     if "sign in to confirm" in low or "not a bot" in low:
-        return ("YouTube is blocking this server as a bot. That is YouTube refusing "
-                "datacenter traffic, not a fault in the app — run import-service/ on a "
-                "home machine instead, or convert the track manually and upload it.")
+        if os.environ.get("YT_COOKIES", "").strip():
+            return ("YouTube rejected this server even with cookies — they have most "
+                    "likely expired. Export them again, or run import-service/ on a "
+                    "home machine, which does not need cookies at all.")
+        return ("YouTube is blocking this server as a bot, because the request comes "
+                "from a datacenter IP. Two fixes: set a YT_COOKIES environment variable "
+                "in Vercel, or run import-service/ on a home machine. See "
+                "import-service/README.md.")
     if "private video" in low or "age" in low:
         return "That video is private or age-restricted."
     if "unavailable" in low or "removed" in low:
@@ -79,10 +84,29 @@ def _client_opts(client):
     return {"extractor_args": {"youtube": {"player_client": [client]}}} if client else {}
 
 
+# Optional: paste a Netscape-format cookie export into the YT_COOKIES environment
+# variable in the Vercel dashboard. An authenticated request is the only thing
+# that reliably gets past YouTube's datacenter-IP blocking. Set it yourself in
+# the dashboard so the value never travels through anything else.
+def _cookie_file(tmp):
+    raw = os.environ.get("YT_COOKIES", "").strip()
+    if not raw:
+        return None
+    # env vars usually arrive with literal \n rather than real newlines
+    text = raw.replace("\\n", "\n")
+    if not text.endswith("\n"):
+        text += "\n"
+    path = os.path.join(tmp, "cookies.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return path
+
+
 def fetch(url):
     import yt_dlp
 
     with tempfile.TemporaryDirectory() as tmp:
+        cookies = _cookie_file(tmp)
         # Read metadata first so we can reject a very long track cheaply.
         # Whichever client succeeds here is the one we download with.
         info = None
@@ -91,6 +115,8 @@ def fetch(url):
         for client in PLAYER_CLIENTS:
             probe_opts = {"quiet": True, "no_warnings": True, "noplaylist": True,
                           "skip_download": True, "socket_timeout": 15}
+            if cookies:
+                probe_opts["cookiefile"] = cookies
             probe_opts.update(_client_opts(client))
             try:
                 with yt_dlp.YoutubeDL(probe_opts) as ydl:
@@ -122,6 +148,8 @@ def fetch(url):
             "socket_timeout": 20,
             "retries": 3,
         }
+        if cookies:
+            opts["cookiefile"] = cookies
         opts.update(_client_opts(working_client))
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])

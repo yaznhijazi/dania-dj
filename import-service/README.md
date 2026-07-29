@@ -66,6 +66,28 @@ ALLOWED_ORIGINS=https://your-app.vercel.app
 Keep `yt-dlp` updated (`wget` the latest release, or rebuild the image) — extraction
 breaks whenever the source site changes.
 
+## If YouTube says "Sign in to confirm you're not a bot"
+
+That is YouTube refusing traffic from datacenter IP ranges. It is not a bug, and no
+Python library gets around it — `yt-dlp`, `pytube` and the rest all leave from the same
+address. What matters is where the request comes from, not what sends it.
+
+Three ways out, honestly ranked:
+
+1. **Run this service on a home machine.** A residential IP is not blocked, so nothing
+   special is needed. Free, and by far the most reliable.
+2. **Authenticate with cookies.** Export your YouTube cookies in Netscape format (a
+   browser extension such as "Get cookies.txt" produces this) and set them as
+   `YT_COOKIES` — here, or in the Vercel dashboard for `api/import.py`. Both read the
+   same variable. Know the trade-off first: those cookies are a live session for your
+   Google account, anyone who can read that variable can act as you on YouTube,
+   automated traffic on an account is exactly what YouTube suspends people for, and
+   they expire every few weeks and must be re-exported. Use a throwaway account, never
+   your main one.
+3. **A residential proxy.** Works, costs money every month.
+
+There is no fourth option that makes a datacenter IP look residential for free.
+
 ## Before you deploy this
 
 Downloading audio from YouTube is against YouTube's Terms of Service, and the recordings
