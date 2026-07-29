@@ -1,0 +1,10 @@
+{
+  "name": "dania-dj",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dania DJ — wedding playlist builder. Static, client-side audio editing and mixdown.",
+  "scripts": {
+    "dev": "npx --yes serve public -l 3000",
+    "build": "echo \"static site — nothing to build\""
+  }
+}

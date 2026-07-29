@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dania DJ — Wedding Playlist Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:oklch(0.985 0.006 75);
+    --surface:oklch(0.995 0.003 75);
+    --text:oklch(0.24 0.02 60);
+    --muted:oklch(0.52 0.02 60);
+    --border:oklch(0.9 0.012 65);
+    --border2:oklch(0.88 0.012 65);
+    --accent:oklch(0.56 0.15 45);
+    --accent-dk:oklch(0.51 0.15 45);
+    --accent-soft:oklch(0.96 0.02 45);
+    --accent-soft2:oklch(0.93 0.035 45);
+    --accent-text:oklch(0.4 0.13 45);
+    --wave:oklch(0.7 0.01 60);
+    --track:oklch(0.96 0.008 75);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:'Work Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:oklch(0.85 0.015 60);border-radius:8px}
+  @keyframes modalIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+  @keyframes overlayIn{from{opacity:0}to{opacity:1}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;width:100%}
+  input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:oklch(0.89 0.012 65)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);margin-top:-6px;cursor:pointer}
+  input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:oklch(0.89 0.012 65)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border:2px solid #fff;border-radius:50%;background:var(--accent);cursor:pointer}
+  input[type=text],select{font-family:inherit;color:var(--text)}
+  button{font-family:inherit}
+  .app{width:100%;min-height:100vh;display:flex;flex-direction:column}
+  .topbar{height:64px;flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .logo{display:flex;align-items:center;gap:10px;cursor:pointer}
+  .logo-mark{width:30px;height:30px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Lora',serif;font-weight:700;font-size:16px}
+  .logo-txt{font-family:'Lora',serif;font-weight:600;font-size:19px;letter-spacing:.2px}
+  .body{flex:1 1 auto;display:flex;min-height:0}
+  .sidebar{width:220px;flex:0 0 auto;border-right:1px solid var(--border);background:var(--surface);padding:22px 16px;display:flex;flex-direction:column;gap:22px}
+  .main{flex:1 1 auto;overflow-y:auto;min-width:0}
+  .nav-item{padding:10px 12px;border-radius:8px;font-size:13.5px;font-weight:500;cursor:pointer;color:oklch(0.4 0.02 60)}
+  .nav-item.active{font-weight:600;background:var(--accent-soft2);color:var(--accent-text)}
+  .h1{font-family:'Lora',serif;font-weight:700;font-size:32px}
+  .h2{font-family:'Lora',serif;font-weight:700;font-size:26px}
+  .sub{color:var(--muted);font-size:14px;margin-top:6px}
+  .btn{background:var(--accent);color:#fff;padding:11px 20px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;border:0;display:inline-flex;align-items:center;gap:8px}
+  .btn:hover{background:var(--accent-dk)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.sm{padding:9px 16px;font-size:13px;border-radius:8px}
+  .btn.dark{background:oklch(0.24 0.02 60)}
+  .btn.dark:hover{background:oklch(0.18 0.02 60)}
+  .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--border2)}
+  .btn.ghost:hover{background:var(--track);color:var(--text)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px}
+  .grid-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px}
+  .pl-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;cursor:pointer;box-shadow:0 1px 2px rgba(30,20,10,.04);transition:box-shadow .15s;position:relative}
+  .pl-card:hover{box-shadow:0 6px 20px rgba(30,20,10,.08)}
+  .pl-mini{width:100%;height:64px;border-radius:8px;background:var(--accent-soft);display:flex;align-items:flex-end;gap:2px;padding:10px;margin-bottom:16px;overflow:hidden}
+  .pl-mini i{width:3px;flex:0 0 auto;border-radius:2px;background:var(--accent);opacity:.55}
+  .dashed{border:1.5px dashed oklch(0.85 0.015 60);border-radius:14px}
+  .song-row{display:flex;align-items:center;gap:16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:4px;cursor:grab}
+  .song-row.dragging{opacity:.4}
+  .song-row.over{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+  .icon-btn{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:13px;border:0;background:transparent}
+  .icon-btn:hover{background:var(--track);color:var(--text)}
+  .play-circle{width:34px;height:34px;border-radius:50%;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;color:var(--accent);background:transparent;font-size:12px}
+  .play-circle:hover{background:var(--accent-soft)}
+  .mini-wave{width:140px;height:32px;display:flex;align-items:flex-end;gap:1.5px;flex:0 0 auto}
+  .mini-wave i{width:2px;flex:0 0 auto;border-radius:1px;background:var(--wave)}
+  .connector{display:flex;align-items:center;gap:10px;padding:6px 0 6px 60px;cursor:pointer}
+  .connector .line{flex:1 1 auto;height:1px;background:var(--border2)}
+  .connector .pill{font-size:11.5px;color:var(--accent);background:var(--accent-soft);padding:4px 10px;border-radius:20px;white-space:nowrap}
+  .connector:hover .pill{background:var(--accent-soft2)}
+  .back{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:18px;cursor:pointer;width:fit-content}
+  .back:hover{color:var(--text)}
+  .wave-box{position:relative;height:110px;background:var(--track);border-radius:8px;overflow:hidden;touch-action:none;user-select:none}
+  .wave-bars{position:absolute;inset:0;display:flex;align-items:center;gap:2px;padding:0 4px}
+  .wave-bars i{flex:1 1 auto;border-radius:2px;background:var(--accent)}
+  .veil{position:absolute;top:0;bottom:0;background:rgba(255,255,255,.72);pointer-events:none}
+  .cut{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(45deg,rgba(0,0,0,.10),rgba(0,0,0,.10) 5px,transparent 5px,transparent 10px);border-left:1px solid oklch(0.6 0.03 60);border-right:1px solid oklch(0.6 0.03 60);pointer-events:none}
+  .sel{position:absolute;top:0;bottom:0;background:oklch(0.7 0.12 250 / .18);border-left:1px solid oklch(0.5 0.14 250);border-right:1px solid oklch(0.5 0.14 250);pointer-events:none}
+  .handle{position:absolute;top:0;bottom:0;width:10px;margin-left:-5px;background:var(--accent);cursor:ew-resize;border-radius:3px;touch-action:none}
+  .playhead{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:oklch(0.24 0.02 60);pointer-events:none}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .lbl{font-size:13px;font-weight:600;margin-bottom:10px}
+  .seg{display:flex;gap:8px}
+  .seg > div{flex:1;text-align:center;padding:10px 12px;border-radius:8px;font-size:13.5px;font-weight:500;cursor:pointer;color:oklch(0.4 0.02 60)}
+  .seg > div.active{font-weight:600;background:var(--accent-soft2);color:var(--accent-text)}
+  .miniplayer{flex:0 0 auto;height:76px;border-top:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:18px;padding:0 24px}
+  .mp-round{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);flex:0 0 auto;border:0;background:transparent;font-size:11px}
+  .mp-round:hover{background:var(--track);color:var(--text)}
+  .mp-main{width:38px;height:38px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;border:0;font-size:12px}
+  .bar{height:5px;border-radius:3px;background:oklch(0.94 0.01 60);overflow:hidden;flex:1 1 auto;cursor:pointer}
+  .bar > div{height:100%;background:var(--accent)}
+  .overlay{position:fixed;inset:0;background:rgba(30,22,14,.35);display:flex;align-items:center;justify-content:center;z-index:50;animation:overlayIn .15s ease}
+  .modal{background:var(--surface);border-radius:16px;padding:28px;width:460px;max-width:90vw;box-shadow:0 20px 60px rgba(20,14,8,.25);animation:modalIn .18s ease}
+  .tabs{display:flex;gap:6px;margin-bottom:18px;background:var(--track);border-radius:9px;padding:4px}
+  .tabs > div{flex:1;text-align:center;padding:8px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer}
+  .tabs > div.active{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:1.5px dashed oklch(0.82 0.02 60);border-radius:12px;padding:38px 20px;cursor:pointer;color:var(--muted);text-align:center}
+  .drop.hot{border-color:var(--accent);background:var(--accent-soft)}
+  .inp{width:100%;padding:11px 12px;border-radius:8px;border:1px solid var(--border2);font-size:13.5px;background:#fff}
+  .note{font-size:12.5px;color:var(--muted);line-height:1.5}
+  .radio-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;cursor:pointer;border:1px solid var(--border);background:transparent}
+  .radio-row.on{border-color:var(--accent);background:oklch(0.97 0.02 45)}
+  .dot{width:16px;height:16px;border-radius:50%;border:2px solid oklch(0.8 0.015 60);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .radio-row.on .dot{border-color:var(--accent)}
+  .dot i{width:8px;height:8px;border-radius:50%;background:var(--accent);display:block}
+  .stat{font-family:'Lora',serif;font-weight:600;font-size:20px;margin-top:2px}
+  .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:oklch(0.24 0.02 60);color:#fff;padding:11px 18px;border-radius:10px;font-size:13.5px;z-index:99;box-shadow:0 8px 30px rgba(0,0,0,.25);max-width:80vw}
+  .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+  .chip{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--track);color:var(--muted);white-space:nowrap}
+  .chip.demo{background:oklch(0.94 0.04 250);color:oklch(0.38 0.1 250)}
+  .ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  @media (max-width:820px){
+    .sidebar{display:none}
+    .grid2{grid-template-columns:1fr}
+    .mini-wave{display:none}
+    .topbar{padding:0 16px}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="layer"></div>
+<div id="toast-layer"></div>
+
+<script>
+/* ==========================================================================
+   Dania DJ — wedding playlist builder
+   Real audio engine on the Web Audio API: decode -> trim/cut -> EQ ->
+   normalize -> per-track fades -> crossfaded mixdown -> WAV/MP3 export.
+   ========================================================================== */
+
+/* ---------- small utilities ---------- */
+const SR = 44100;                      // project sample rate for mix + export
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function fmt(sec){ sec = Math.max(0, Math.round(sec||0)); const m = Math.floor(sec/60), s = sec%60; return m + ':' + String(s).padStart(2,'0'); }
+function fmtLong(sec){ sec = Math.max(0, Math.round(sec||0)); const h = Math.floor(sec/3600); const m = Math.floor(sec%3600/60), s = sec%60;
+  return h ? h + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0') : m + ':' + String(s).padStart(2,'0'); }
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function seedFromString(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h<<5)-h+s.charCodeAt(i); h|=0; } return Math.abs(h); }
+function makeWave(seedStr, n){ n=n||48; const rnd=mulberry32(seedFromString(seedStr)); const a=[]; let p=0.5;
+  for(let i=0;i<n;i++){ p=Math.max(.14,Math.min(1,p+(rnd()-.5)*.55)); a.push(p); } return a; }
+
+let toastTimer = null;
+function toast(msg, ms){
+  clearTimeout(toastTimer);
+  $('toast-layer').innerHTML = '<div class="toast">' + esc(msg) + '</div>';
+  toastTimer = setTimeout(() => { $('toast-layer').innerHTML = ''; }, ms || 3200);
+}
+
+/* ---------- audio context ---------- */
+let AC = null;
+function ac(){
+  if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+  if (AC.state === 'suspended') AC.resume();
+  return AC;
+}
+
+/* ---------- IndexedDB: original encoded audio bytes ---------- */
+const DB_NAME = 'dania-dj', DB_STORE = 'audio';
+let dbp = null;
+function db(){
+  if (dbp) return dbp;
+  dbp = new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains(DB_STORE)) r.result.createObjectStore(DB_STORE); };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  }).catch(() => null);
+  return dbp;
+}
+async function idbPut(key, val){
+  const d = await db(); if (!d) return false;
+  return new Promise((res) => { const tx = d.transaction(DB_STORE, 'readwrite'); tx.objectStore(DB_STORE).put(val, key);
+    tx.oncomplete = () => res(true); tx.onerror = () => res(false); });
+}
+async function idbGet(key){
+  const d = await db(); if (!d) return null;
+  return new Promise((res) => { const tx = d.transaction(DB_STORE, 'readonly'); const q = tx.objectStore(DB_STORE).get(key);
+    q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); });
+}
+async function idbDel(key){
+  const d = await db(); if (!d) return;
+  return new Promise((res) => { const tx = d.transaction(DB_STORE, 'readwrite'); tx.objectStore(DB_STORE).delete(key);
+    tx.oncomplete = () => res(); tx.onerror = () => res(); });
+}
+
+/* ==========================================================================
+   Song model
+   ========================================================================== */
+const EQ_PRESETS = {
+  none:   { label: 'None (Flat)', bands: [] },
+  warm:   { label: 'Warm',        bands: [ {type:'lowshelf',  f:250,  g: 4.0}, {type:'highshelf', f:6000, g:-3.0} ] },
+  bright: { label: 'Bright',      bands: [ {type:'highshelf', f:5000, g: 4.5}, {type:'peaking',   f:2500, g: 1.5, q:1} ] },
+  bass:   { label: 'Bass Boost',  bands: [ {type:'lowshelf',  f:120,  g: 6.0}, {type:'peaking',   f:400,  g:-1.5, q:1} ] },
+  vocal:  { label: 'Vocal Lift',  bands: [ {type:'peaking',   f:200,  g:-2.5, q:1}, {type:'peaking', f:3000, g:3.5, q:.9} ] },
+};
+const CURVES = { linear:'Linear', smooth:'Smooth', sharp:'Sharp' };
+
+function makeSong(title, artist, duration, opts){
+  opts = opts || {};
+  return {
+    id: uid(), title, artist,
+    duration,                       // full source length, seconds
+    start: 0, end: duration,        // trim
+    cuts: [],                       // [{start,end}] removed regions, source time
+    fadeIn: 2, fadeOut: 5,
+    volume: 82, normalize: false, eq: 'none',
+    crossfade: 5, curve: 'smooth',  // crossfade INTO the next song
+    peaks: opts.peaks || makeWave(title + artist, 96),
+    srcId: opts.srcId || null,      // IndexedDB key of the encoded file
+    demo: !!opts.demo,              // synthesized placeholder audio
+  };
+}
+
+/* kept regions of a song, in source-time seconds, after trim + cuts */
+function keptRegions(song){
+  let regions = [[song.start, song.end]];
+  (song.cuts || []).slice().sort((a,b) => a.start - b.start).forEach((cut) => {
+    const next = [];
+    regions.forEach(([a, b]) => {
+      const s = Math.max(a, cut.start), e = Math.min(b, cut.end);
+      if (s >= e) { next.push([a, b]); return; }        // no overlap
+      if (a < s) next.push([a, s]);
+      if (e < b) next.push([e, b]);
+    });
+    regions = next;
+  });
+  return regions.filter(([a, b]) => b - a > 0.02);
+}
+function songDuration(song){ return keptRegions(song).reduce((t, [a, b]) => t + (b - a), 0); }
+function playlistDuration(pl){
+  const songs = pl.songs;
+  let t = 0;
+  songs.forEach((s, i) => {
+    t += songDuration(s);
+    if (i < songs.length - 1) t -= effectiveCrossfade(songs, i);
+  });
+  return Math.max(0, t);
+}
+/* a crossfade can never be longer than either neighbour */
+function effectiveCrossfade(songs, i){
+  if (i >= songs.length - 1) return 0;
+  const a = songDuration(songs[i]), b = songDuration(songs[i + 1]);
+  return clamp(songs[i].crossfade, 0, Math.min(a, b) * 0.9);
+}
+/* absolute start time of each song on the mix timeline */
+function mixOffsets(songs){
+  const out = []; let t = 0;
+  songs.forEach((s, i) => { out.push(t); t += songDuration(s) - effectiveCrossfade(songs, i); });
+  return out;
+}
+function fadeShape(curve, x){
+  if (curve === 'linear') return x;
+  if (curve === 'sharp')  return x * x;
+  return Math.sin(x * Math.PI / 2);          // smooth == equal power
+}
+/* fade lengths a song actually gets inside the mix */
+function fadeTimes(songs, i){
+  const s = songs[i];
+  const dur = songDuration(s);
+  let fi = i === 0 ? s.fadeIn : Math.max(s.fadeIn, effectiveCrossfade(songs, i - 1));
+  let fo = i === songs.length - 1 ? s.fadeOut : Math.max(s.fadeOut, effectiveCrossfade(songs, i));
+  if (fi + fo > dur) { const k = dur / (fi + fo); fi *= k; fo *= k; }   // never overlap
+  return { fi, fo, dur };
+}
+function baseGain(song, peak){
+  const v = song.volume / 100;
+  return song.normalize ? v * (0.891 / Math.max(0.02, peak || 1)) : v;
+}
+
+/* ==========================================================================
+   Audio engine — decode, trim, cut, EQ, peaks
+   ========================================================================== */
+const bufCache = new Map();   // songKey -> {buffer, peak, dur}
+const CACHE_MAX = 3;
+const rawCache = new Map();   // srcId -> decoded source AudioBuffer
+const RAW_MAX = 2;
+
+function songKey(s){
+  return [s.id, s.start.toFixed(3), s.end.toFixed(3), s.eq,
+          (s.cuts||[]).map(c => c.start.toFixed(2) + '-' + c.end.toFixed(2)).join(',')].join('|');
+}
+function trim(map, max){ while (map.size > max) map.delete(map.keys().next().value); }
+
+/* Synthesized stand-in audio for the demo tracks, so every feature
+   (preview, crossfade, export) works before the user uploads anything. */
+function synthBuffer(song){
+  const c = ac();
+  const n = Math.ceil(song.duration * SR);
+  const buf = c.createBuffer(2, n, SR);
+  const rnd = mulberry32(seedFromString(song.title + song.artist));
+  const root = 110 * Math.pow(2, Math.floor(rnd() * 12) / 12);
+  const chord = [1, 1.25, 1.5, 2];                        // major triad + octave
+  const bpm = 92 + Math.floor(rnd() * 40);
+  const beat = 60 / bpm;
+  const L = buf.getChannelData(0), R = buf.getChannelData(1);
+  for (let i = 0; i < n; i++){
+    const t = i / SR;
+    let v = 0;
+    for (let k = 0; k < chord.length; k++){
+      const f = root * chord[k] * (k === 3 ? 2 : 1);
+      v += Math.sin(2 * Math.PI * f * t) * (0.16 / (k + 1));
+    }
+    const ph = (t % beat) / beat;                          // kick
+    v += Math.sin(2 * Math.PI * (55 + 40 * Math.exp(-ph * 18)) * t) * 0.30 * Math.exp(-ph * 9);
+    const bar = (t % (beat * 4)) / (beat * 4);             // gentle 4-bar swell
+    v *= 0.75 + 0.25 * Math.sin(bar * Math.PI);
+    L[i] = clamp(v * 0.9, -1, 1);
+    R[i] = clamp(v * 0.9 * (1 - 0.06 * Math.sin(t * 0.7)), -1, 1);
+  }
+  return buf;
+}
+
+async function sourceBuffer(song){
+  if (song.demo || !song.srcId){
+    if (rawCache.has(song.id)) return rawCache.get(song.id);
+    const b = synthBuffer(song);
+    rawCache.set(song.id, b); trim(rawCache, RAW_MAX);
+    return b;
+  }
+  if (rawCache.has(song.srcId)) return rawCache.get(song.srcId);
+  const bytes = await idbGet(song.srcId);
+  if (!bytes) throw new Error('Audio for "' + song.title + '" is missing from local storage. Re-add the file.');
+  const buf = await ac().decodeAudioData(bytes.slice(0));
+  rawCache.set(song.srcId, buf); trim(rawCache, RAW_MAX);
+  return buf;
+}
+
+/* concatenate the kept regions with 6 ms butt-splice fades (no clicks) */
+function spliceRegions(src, regions){
+  const c = ac();
+  const sr = src.sampleRate;
+  const ch = Math.min(2, src.numberOfChannels);
+  const total = regions.reduce((t, [a, b]) => t + Math.round((b - a) * sr), 0);
+  if (total <= 0) return null;
+  const out = c.createBuffer(ch, total, sr);
+  const XF = Math.min(Math.round(0.006 * sr), 512);
+  for (let k = 0; k < ch; k++){
+    const dst = out.getChannelData(k);
+    const s = src.getChannelData(Math.min(k, src.numberOfChannels - 1));
+    let w = 0;
+    regions.forEach(([a, b], ri) => {
+      const from = Math.round(a * sr), len = Math.round((b - a) * sr);
+      for (let i = 0; i < len; i++) dst[w + i] = s[from + i] || 0;
+      if (ri > 0) for (let i = 0; i < Math.min(XF, len); i++) dst[w + i] *= i / XF;
+      if (ri < regions.length - 1) for (let i = 0; i < Math.min(XF, len); i++) dst[w + len - 1 - i] *= i / XF;
+      w += len;
+    });
+  }
+  return out;
+}
+
+async function applyEq(buf, eqId){
+  const preset = EQ_PRESETS[eqId] || EQ_PRESETS.none;
+  if (!preset.bands.length && buf.sampleRate === SR) return buf;
+  const off = new OfflineAudioContext(buf.numberOfChannels, Math.ceil(buf.duration * SR), SR);
+  const src = off.createBufferSource(); src.buffer = buf;
+  let node = src;
+  preset.bands.forEach((b) => {
+    const f = off.createBiquadFilter();
+    f.type = b.type; f.frequency.value = b.f; f.gain.value = b.g; if (b.q) f.Q.value = b.q;
+    node.connect(f); node = f;
+  });
+  node.connect(off.destination);
+  src.start(0);
+  return off.startRendering();
+}
+
+function peakOf(buf){
+  let p = 0;
+  for (let k = 0; k < buf.numberOfChannels; k++){
+    const d = buf.getChannelData(k);
+    for (let i = 0; i < d.length; i += 7){ const a = Math.abs(d[i]); if (a > p) p = a; }
+  }
+  return p || 1;
+}
+
+/* fully prepared, per-song audio: trimmed, cut, EQ'd, at project sample rate */
+async function songAudio(song){
+  const key = songKey(song);
+  if (bufCache.has(key)) { const v = bufCache.get(key); bufCache.delete(key); bufCache.set(key, v); return v; }
+  const src = await sourceBuffer(song);
+  const regions = keptRegions(song).map(([a, b]) => [clamp(a, 0, src.duration), clamp(b, 0, src.duration)]);
+  const spliced = spliceRegions(src, regions);
+  if (!spliced) throw new Error('"' + song.title + '" has no audio left after trimming.');
+  const buffer = await applyEq(spliced, song.eq);
+  const entry = { buffer, peak: peakOf(buffer), dur: buffer.duration };
+  bufCache.set(key, entry); trim(bufCache, CACHE_MAX);
+  return entry;
+}
+
+function computePeaks(buf, n){
+  n = n || 96;
+  const d = buf.getChannelData(0);
+  const step = Math.floor(d.length / n) || 1;
+  const out = [];
+  for (let i = 0; i < n; i++){
+    let m = 0;
+    const end = Math.min(d.length, (i + 1) * step);
+    for (let j = i * step; j < end; j += 3){ const a = Math.abs(d[j]); if (a > m) m = a; }
+    out.push(m);
+  }
+  const top = Math.max(...out, 0.001);
+  return out.map((v) => clamp(0.12 + (v / top) * 0.88, 0.06, 1));
+}
+
+/* ==========================================================================
+   Playback — one song, and the full crossfaded mix (scheduled live)
+   ========================================================================== */
+function envelopeOn(param, t0, dur, fi, fo, base, curve){
+  const N = 96;
+  const arr = (fn) => { const a = new Float32Array(N); for (let i = 0; i < N; i++) a[i] = Math.max(0.0001, base * fn(i / (N - 1))); return a; };
+  param.cancelScheduledValues(t0);
+  if (fi > 0.02){
+    param.setValueAtTime(0.0001, t0);
+    param.setValueCurveAtTime(arr((x) => fadeShape(curve, x)), t0, fi);
+  } else {
+    param.setValueAtTime(base, t0);
+  }
+  param.setValueAtTime(base, t0 + fi + 0.001);
+  if (fo > 0.02) param.setValueCurveAtTime(arr((x) => fadeShape(curve, 1 - x)), t0 + dur - fo, fo);
+  else param.setValueAtTime(0.0001, t0 + dur);
+}
+
+/* Plays a playlist with real crossfades, decoding ahead of the playhead. */
+class MixPlayer {
+  constructor(){ this.reset(); }
+  reset(){
+    this.songs = null; this.offsets = []; this.nodes = [];
+    this.scheduled = new Set(); this.origin = 0; this.playing = false;
+    this.total = 0; this.timer = null; this.onTick = null; this.stopAt = Infinity;
+  }
+  get time(){ return this.playing ? Math.min(this.stopAt, ac().currentTime - this.origin) : this._pos || 0; }
+  async start(songs, from, opts){
+    opts = opts || {};
+    this.stop();
+    if (!songs.length) return;
+    const c = ac();
+    this.songs = songs;
+    this.offsets = mixOffsets(songs);
+    this.total = playlistDuration({ songs });
+    this.origin = c.currentTime + 0.15 - from;
+    this.stopAt = opts.until != null ? opts.until : Infinity;
+    this.playing = true;
+    this._pos = from;
+    this.onTick = opts.onTick || null;
+    await this.pump();
+    this.timer = setInterval(() => this.tick(), 250);
+  }
+  async pump(){
+    if (!this.playing) return;
+    const c = ac();
+    const now = c.currentTime - this.origin;
+    const horizon = now + 12;
+    for (let i = 0; i < this.songs.length; i++){
+      const t0 = this.offsets[i];
+      const { fi, fo, dur } = fadeTimes(this.songs, i);
+      if (t0 + dur <= now || t0 > horizon || t0 > this.stopAt) continue;
+      if (this.scheduled.has(i)) continue;
+      this.scheduled.add(i);
+      let entry;
+      try { entry = await songAudio(this.songs[i]); }
+      catch (e) { toast(e.message); continue; }
+      if (!this.playing) return;
+      const offsetIntoSong = Math.max(0, now + 0.1 - t0);
+      const when = c.currentTime + Math.max(0.05, t0 - now);
+      const src = c.createBufferSource(); src.buffer = entry.buffer;
+      const g = c.createGain();
+      src.connect(g).connect(c.destination);
+      const base = baseGain(this.songs[i], entry.peak);
+      const startT = offsetIntoSong > 0 ? c.currentTime + 0.05 : when;
+      if (offsetIntoSong > 0){
+        // joined mid-song: hold the level the envelope would already be at
+        const lvl = offsetIntoSong < fi ? base * fadeShape(this.songs[i].curve, offsetIntoSong / fi) : base;
+        g.gain.setValueAtTime(Math.max(0.0001, lvl), startT);
+        const remainToOut = (dur - fo) - offsetIntoSong;
+        if (remainToOut > 0) g.gain.setValueAtTime(base, startT + remainToOut);
+        if (fo > 0.02){
+          const N = 96, a = new Float32Array(N);
+          for (let k = 0; k < N; k++) a[k] = Math.max(0.0001, base * fadeShape(this.songs[i].curve, 1 - k / (N - 1)));
+          g.gain.setValueCurveAtTime(a, startT + Math.max(0, remainToOut), fo);
+        }
+        src.start(startT, offsetIntoSong);
+      } else {
+        envelopeOn(g.gain, when, dur, fi, fo, base, this.songs[i].curve);
+        src.start(when);
+      }
+      this.nodes.push(src, g);
+    }
+  }
+  tick(){
+    if (!this.playing) return;
+    const t = ac().currentTime - this.origin;
+    this._pos = t;
+    if (this.onTick) this.onTick(t, this.total);
+    if (t >= Math.min(this.total, this.stopAt)) { this.stop(); if (this.onEnd) this.onEnd(); return; }
+    this.pump();
+  }
+  stop(){
+    this.playing = false;
+    clearInterval(this.timer); this.timer = null;
+    this.nodes.forEach((n) => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} try { n.disconnect(); } catch (e) {} });
+    this.nodes = []; this.scheduled = new Set();
+  }
+}
+const mixPlayer = new MixPlayer();
+
+/* single-song preview with its own fades */
+let soloNodes = [], soloTimer = null, soloInfo = null;
+function stopSolo(){
+  soloNodes.forEach((n) => { try { n.stop && n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} });
+  soloNodes = []; clearInterval(soloTimer); soloTimer = null; soloInfo = null;
+}
+function stopAll(){
+  stopSolo(); mixPlayer.stop();
+  state.player = { kind: null, id: null, pos: 0, total: 0 };
+}
+async function playSolo(song, fromFrac){
+  stopAll();
+  let entry;
+  try { entry = await songAudio(song); } catch (e) { toast(e.message); render(); return; }
+  const c = ac();
+  const dur = entry.dur;
+  const from = clamp((fromFrac || 0) * dur, 0, Math.max(0, dur - 0.1));
+  const src = c.createBufferSource(); src.buffer = entry.buffer;
+  const g = c.createGain(); src.connect(g).connect(c.destination);
+  const t0 = c.currentTime + 0.05;
+  const fi = Math.min(song.fadeIn, dur / 2), fo = Math.min(song.fadeOut, dur / 2);
+  if (from > 0.01){
+    g.gain.setValueAtTime(Math.max(0.0001, baseGain(song, entry.peak)), t0);
+    const remain = (dur - fo) - from;
+    if (fo > 0.02 && remain > 0){
+      const N = 96, a = new Float32Array(N), base = baseGain(song, entry.peak);
+      for (let k = 0; k < N; k++) a[k] = Math.max(0.0001, base * fadeShape(song.curve, 1 - k / (N - 1)));
+      g.gain.setValueCurveAtTime(a, t0 + remain, fo);
+    }
+  } else {
+    envelopeOn(g.gain, t0, dur, fi, fo, baseGain(song, entry.peak), song.curve);
+  }
+  src.start(t0, from);
+  soloNodes = [src, g];
+  soloInfo = { start: t0, from, dur };
+  state.player = { kind: 'solo', id: song.id, pos: from, total: dur };
+  src.onended = () => { if (state.player.kind === 'solo' && state.player.id === song.id) { stopAll(); render(); } };
+  soloTimer = setInterval(() => {
+    if (!soloInfo) return;
+    state.player.pos = clamp(ac().currentTime - soloInfo.start + soloInfo.from, 0, soloInfo.dur);
+    paintProgress();
+  }, 100);
+  render();
+}
+
+/* ==========================================================================
+   Export — windowed streaming mixdown (bounded memory, real progress)
+   ========================================================================== */
+const WINDOW = 20;   // seconds rendered per pass
+
+async function renderMixStreaming(songs, onChunk, onProgress){
+  const offsets = mixOffsets(songs);
+  const total = playlistDuration({ songs });
+  if (total <= 0) throw new Error('Nothing to export — this playlist has no audible audio.');
+
+  // pre-compute per-song envelope parameters (needs peak => needs decode)
+  const meta = [];
+  for (let i = 0; i < songs.length; i++){
+    onProgress && onProgress(i / songs.length * 0.35, 'Decoding ' + songs[i].title);
+    const entry = await songAudio(songs[i]);
+    const { fi, fo, dur } = fadeTimes(songs, i);
+    meta.push({ song: songs[i], peak: entry.peak, dur, fi, fo, base: baseGain(songs[i], entry.peak), t0: offsets[i] });
+  }
+
+  const totalFrames = Math.ceil(total * SR);
+  let written = 0;
+  while (written < totalFrames){
+    const n = Math.min(Math.ceil(WINDOW * SR), totalFrames - written);
+    const w0 = written / SR;
+    const L = new Float32Array(n), R = new Float32Array(n);
+    for (let i = 0; i < meta.length; i++){
+      const m = meta[i];
+      if (m.t0 + m.dur <= w0 || m.t0 >= w0 + n / SR) continue;
+      const entry = await songAudio(m.song);          // cached; re-decodes only if evicted
+      const sl = entry.buffer.getChannelData(0);
+      const sr_ = entry.buffer.numberOfChannels > 1 ? entry.buffer.getChannelData(1) : sl;
+      const startFrame = Math.round(m.t0 * SR);
+      for (let j = 0; j < n; j++){
+        const idx = written + j - startFrame;
+        if (idx < 0 || idx >= sl.length) continue;
+        const t = idx / SR;
+        let env = 1;
+        if (m.fi > 0.02 && t < m.fi) env = fadeShape(m.song.curve, t / m.fi);
+        else if (m.fo > 0.02 && t > m.dur - m.fo) env = fadeShape(m.song.curve, Math.max(0, (m.dur - t) / m.fo));
+        const g = m.base * env;
+        L[j] += sl[idx] * g;
+        R[j] += sr_[idx] * g;
+      }
+    }
+    for (let j = 0; j < n; j++){ L[j] = clamp(L[j], -1, 1); R[j] = clamp(R[j], -1, 1); }  // safety limiter
+    await onChunk(L, R, n);
+    written += n;
+    onProgress && onProgress(0.35 + (written / totalFrames) * 0.6, 'Mixing');
+    await new Promise((r) => setTimeout(r, 0));   // yield so the UI paints
+  }
+  return { frames: totalFrames, seconds: total };
+}
+
+function wavHeader(frames, channels, sampleRate, bits){
+  const blockAlign = channels * bits / 8;
+  const dataSize = frames * blockAlign;
+  const b = new ArrayBuffer(44), v = new DataView(b);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + dataSize, true); str(8, 'WAVE');
+  str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+  v.setUint16(22, channels, true); v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * blockAlign, true); v.setUint16(32, blockAlign, true);
+  v.setUint16(34, bits, true); str(36, 'data'); v.setUint32(40, dataSize, true);
+  return new Uint8Array(b);
+}
+function f32toI16(L, R, n){
+  const out = new Int16Array(n * 2);
+  for (let i = 0; i < n; i++){
+    out[i * 2]     = Math.round(clamp(L[i], -1, 1) * 32767);
+    out[i * 2 + 1] = Math.round(clamp(R[i], -1, 1) * 32767);
+  }
+  return out;
+}
+
+let lamePromise = null;
+function loadLame(){
+  if (window.lamejs) return Promise.resolve(window.lamejs);
+  if (lamePromise) return lamePromise;
+  lamePromise = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
+    s.onload = () => window.lamejs ? res(window.lamejs) : rej(new Error('lamejs did not load'));
+    s.onerror = () => rej(new Error('no-network'));
+    document.head.appendChild(s);
+  });
+  return lamePromise;
+}
+
+async function exportMix(songs, format, onProgress){
+  const parts = [];
+  if (format === 'wav'){
+    const total = playlistDuration({ songs });
+    parts.push(wavHeader(Math.ceil(total * SR), 2, SR, 16));
+    const r = await renderMixStreaming(songs, async (L, R, n) => {
+      parts.push(new Uint8Array(f32toI16(L, R, n).buffer));
+    }, onProgress);
+    onProgress(1, 'Done');
+    return { blob: new Blob(parts, { type: 'audio/wav' }), ext: 'wav', seconds: r.seconds };
+  }
+
+  const kbps = format === 'mp3-320' ? 320 : 192;
+  let lame;
+  try { lame = await loadLame(); }
+  catch (e) { throw new Error('MP3 encoder could not be downloaded (needs internet on first use). Export as WAV instead, or reconnect and retry.'); }
+  const enc = new lame.Mp3Encoder(2, SR, kbps);
+  const left = new Int16Array(1152), right = new Int16Array(1152);
+  let fill = 0;
+  const pushFrame = () => { const b = enc.encodeBuffer(left, right); if (b.length) parts.push(new Uint8Array(b)); fill = 0; };
+  const r = await renderMixStreaming(songs, async (L, R, n) => {
+    for (let i = 0; i < n; i++){
+      left[fill]  = Math.round(clamp(L[i], -1, 1) * 32767);
+      right[fill] = Math.round(clamp(R[i], -1, 1) * 32767);
+      if (++fill === 1152) pushFrame();
+    }
+  }, (p, l) => onProgress(p * 0.97, l));
+  if (fill > 0){ left.fill(0, fill); right.fill(0, fill); pushFrame(); }
+  const tail = enc.flush(); if (tail.length) parts.push(new Uint8Array(tail));
+  onProgress(1, 'Done');
+  return { blob: new Blob(parts, { type: 'audio/mpeg' }), ext: 'mp3', seconds: r.seconds };
+}
+
+function download(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 20000);
+}
+
+/* ==========================================================================
+   State + persistence
+   ========================================================================== */
+const LS_KEY = 'dania-dj.v1';
+
+function demoPlaylists(){
+  // Demo tracks use synthesized audio and are kept short so the whole
+  // pipeline (preview, crossfade, export) is exercisable out of the box.
+  const d = (t, a, sec) => makeSong(t, a, sec, { demo: true });
+  return [
+    { id: uid(), name: 'Sarah & Mike — Reception', date: 'Oct 12, 2026', songs: [
+      d('Perfect', 'Ed Sheeran', 34), d('At Last', 'Etta James', 30),
+      d('Marry You', 'Bruno Mars', 32), d('All of Me', 'John Legend', 36),
+      d("Signed, Sealed, Delivered I'm Yours", 'Stevie Wonder', 28),
+      d('September', 'Earth, Wind & Fire', 33), d('Uptown Funk', 'Mark Ronson ft. Bruno Mars', 35),
+      d('I Wanna Dance with Somebody', 'Whitney Houston', 31),
+      d("Can't Stop the Feeling!", 'Justin Timberlake', 29), d("Don't Stop Believin'", 'Journey', 34),
+    ] },
+    { id: uid(), name: 'Emma & Jake — Cocktail Hour', date: 'Nov 2, 2026', songs: [
+      d('La Vie en Rose', 'Édith Piaf', 30), d('Come Away with Me', 'Norah Jones', 28),
+      d("Isn't She Lovely", 'Stevie Wonder', 32),
+    ] },
+  ];
+}
+
+let state = {
+  screen: 'dashboard',
+  playlists: [],
+  currentPlaylistId: null,
+  currentSongId: null,
+  activeSongId: null,
+  transitionIndex: 0,
+  uploadOpen: false, uploadTab: 'file', ytUrl: '', ytEndpoint: '',
+  dragIndex: null, overIndex: null,
+  player: { kind: null, id: null, pos: 0, total: 0 },
+  selection: null,                          // {a,b} in source seconds, track editor
+  exportState: 'idle', exportProgress: 0, exportLabel: '', exportFormat: 'mp3-320',
+  exportResult: null,
+  busy: null,
+};
+
+function serializable(){
+  return {
+    v: 1,
+    playlists: state.playlists.map((p) => ({ id: p.id, name: p.name, date: p.date, songs: p.songs })),
+    exportFormat: state.exportFormat,
+    ytEndpoint: state.ytEndpoint,
+    // where the user was, so a refresh or a return visit lands in the same place
+    ui: {
+      screen: state.screen,
+      currentPlaylistId: state.currentPlaylistId,
+      currentSongId: state.currentSongId,
+      activeSongId: state.activeSongId,
+      transitionIndex: state.transitionIndex,
+    },
+  };
+}
+let saveTimer = null;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(serializable())); }
+    catch (e) { toast('Could not save playlists locally (storage full).'); }
+  }, 250);
+}
+function load(){
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {}
+  if (raw && Array.isArray(raw.playlists) && raw.playlists.length){
+    state.playlists = raw.playlists;
+    state.exportFormat = raw.exportFormat || 'mp3-320';
+    state.ytEndpoint = raw.ytEndpoint || '';
+    // rebuild anything the schema needs
+    state.playlists.forEach((p) => p.songs.forEach((s) => {
+      s.cuts = s.cuts || []; s.curve = s.curve || 'smooth'; s.peaks = s.peaks || makeWave(s.title, 96);
+    }));
+    // return the user to whatever they were doing last
+    const ui = raw.ui || {};
+    if (ui.currentPlaylistId && state.playlists.some((p) => p.id === ui.currentPlaylistId)){
+      state.currentPlaylistId = ui.currentPlaylistId;
+      state.activeSongId = ui.activeSongId || null;
+      state.currentSongId = ui.currentSongId || null;
+      state.transitionIndex = ui.transitionIndex || 0;
+      const pl = state.playlists.find((p) => p.id === ui.currentPlaylistId);
+      const ok = ['editor', 'track', 'transition', 'export'].includes(ui.screen);
+      // don't restore into a track/transition screen whose subject is gone
+      const valid = ui.screen === 'track' ? pl.songs.some((s) => s.id === ui.currentSongId)
+                  : ui.screen === 'transition' ? pl.songs.length > 1 : true;
+      state.screen = ok && valid ? ui.screen : 'editor';
+    }
+  } else {
+    state.playlists = demoPlaylists();
+  }
+  // ask the browser not to evict our uploaded audio under storage pressure
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+}
+
+const playlist = () => state.playlists.find((p) => p.id === state.currentPlaylistId) || null;
+const songById = (id) => { const p = playlist(); return p ? p.songs.find((s) => s.id === id) : null; };
+function updateSong(id, patch){
+  const p = playlist(); if (!p) return;
+  const i = p.songs.findIndex((s) => s.id === id); if (i < 0) return;
+  Object.assign(p.songs[i], patch);
+  save();
+}
+
+/* ==========================================================================
+   Import
+   ========================================================================== */
+async function addFiles(files){
+  const pl = playlist(); if (!pl) return;
+  const list = Array.from(files).filter((f) => f.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac|opus)$/i.test(f.name));
+  if (!list.length) { toast('No audio files found in that selection.'); return; }
+  state.uploadOpen = false;
+  state.busy = 'Importing 0/' + list.length; render();
+  let ok = 0;
+  for (let i = 0; i < list.length; i++){
+    const f = list[i];
+    state.busy = 'Importing ' + (i + 1) + '/' + list.length + ' — ' + f.name; render();
+    try {
+      const bytes = await f.arrayBuffer();
+      const buf = await ac().decodeAudioData(bytes.slice(0));
+      const srcId = uid();
+      const stored = await idbPut(srcId, bytes);
+      const title = f.name.replace(/\.[^/.]+$/, '').replace(/[_]+/g, ' ');
+      const song = makeSong(title, 'Uploaded file', buf.duration, {
+        srcId: stored ? srcId : null, peaks: computePeaks(buf, 96), demo: !stored,
+      });
+      song.end = buf.duration;
+      if (!stored){ rawCache.set(song.id, buf); toast('Local storage unavailable — "' + title + '" will be lost on reload.'); }
+      pl.songs.push(song);
+      ok++;
+    } catch (e){
+      toast('Could not decode ' + f.name + ' — unsupported or corrupt file.');
+    }
+  }
+  state.busy = null;
+  save(); render();
+  if (ok) toast(ok + (ok === 1 ? ' song added.' : ' songs added.'));
+}
+
+/* YouTube import needs a server: the browser cannot fetch YouTube audio
+   (CORS + no client-side extraction). Point this at your own endpoint that
+   accepts {url} and returns an audio file, and the rest of the app just works. */
+/* mode 'download' saves the converted MP3 to disk (you then add it manually);
+   mode 'add' drops it straight into the current playlist. */
+async function importFromUrl(mode){
+  const pl = playlist(); if (!pl) return;
+  const url = state.ytUrl.trim();
+  if (!url) { toast('Paste a link first.'); return; }
+  const endpoint = state.ytEndpoint.trim();
+  if (!endpoint){
+    toast('No conversion service set — see the setup note in this tab. Until then, convert the track yourself and use the Upload audio tab.', 6000);
+    return;
+  }
+  state.uploadOpen = false;
+  state.busy = 'Converting to MP3… this can take a minute for a long track';
+  render();
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
+    });
+    if (!res.ok){
+      let detail = '';
+      try { detail = (await res.json()).error || ''; } catch (e) { detail = await res.text().catch(() => ''); }
+      throw new Error(detail ? detail : 'the service returned ' + res.status);
+    }
+    const blob = await res.blob();
+    if (!blob.size) throw new Error('the service returned an empty file');
+    const title = (res.headers.get('X-Title') || 'Imported track').replace(/[\\/:*?"<>|]+/g, '_');
+    const name = title + '.mp3';
+    state.busy = null;
+    if (mode === 'add'){
+      await addFiles([new File([blob], name, { type: blob.type || 'audio/mpeg' })]);
+    } else {
+      download(blob, name);
+      render();
+      toast('Downloaded "' + name + '" — add it from the Upload audio tab.', 5000);
+    }
+    state.ytUrl = '';
+  } catch (e){
+    state.busy = null;
+    toast('Conversion failed: ' + e.message, 6000);
+    render();
+  }
+}
+
+/* ==========================================================================
+   Actions
+   ========================================================================== */
+const actions = {
+  goDashboard(){ stopAll(); state.screen = 'dashboard'; state.currentPlaylistId = null; state.exportState = 'idle'; state.exportResult = null; },
+  openPlaylist(id){
+    stopAll();
+    const p = state.playlists.find((x) => x.id === id); if (!p) return;
+    state.screen = 'editor'; state.currentPlaylistId = id;
+    state.activeSongId = p.songs[0] ? p.songs[0].id : null;
+    state.exportState = 'idle'; state.exportResult = null;
+  },
+  newPlaylist(){
+    const p = { id: uid(), name: 'Untitled Playlist', date: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }), songs: [] };
+    state.playlists.unshift(p);
+    state.screen = 'editor'; state.currentPlaylistId = p.id; state.activeSongId = null;
+    save();
+  },
+  async deletePlaylist(id){
+    const p = state.playlists.find((x) => x.id === id); if (!p) return;
+    if (!confirm('Delete "' + p.name + '"? This also removes its uploaded audio from this browser.')) return;
+    for (const s of p.songs) if (s.srcId) await idbDel(s.srcId);
+    state.playlists = state.playlists.filter((x) => x.id !== id);
+    if (state.currentPlaylistId === id) actions.goDashboard();
+    save(); render();
+  },
+  renamePlaylist(id){
+    const p = state.playlists.find((x) => x.id === id); if (!p) return;
+    const n = prompt('Playlist name', p.name); if (n == null) return;
+    p.name = n.trim() || p.name;
+    const d = prompt('Event date', p.date); if (d != null) p.date = d.trim() || p.date;
+    save();
+  },
+  goSongs(){ state.screen = 'editor'; state.selection = null; },
+  goExport(){ stopAll(); state.screen = 'export'; },
+  openTrack(id){ stopAll(); state.screen = 'track'; state.currentSongId = id; state.activeSongId = id; state.selection = null; },
+  openTransition(i){ stopAll(); state.screen = 'transition'; state.transitionIndex = i; },
+  duplicateSong(id){
+    const p = playlist(); const i = p.songs.findIndex((s) => s.id === id); if (i < 0) return;
+    const copy = JSON.parse(JSON.stringify(p.songs[i])); copy.id = uid();
+    p.songs.splice(i + 1, 0, copy); save();
+  },
+  async removeSong(id){
+    const p = playlist(); const s = p.songs.find((x) => x.id === id); if (!s) return;
+    p.songs = p.songs.filter((x) => x.id !== id);
+    if (s.srcId && !state.playlists.some((pp) => pp.songs.some((x) => x.srcId === s.srcId))) await idbDel(s.srcId);
+    if (state.activeSongId === id) state.activeSongId = p.songs[0] ? p.songs[0].id : null;
+    stopAll(); save(); render();
+  },
+  splitSong(id){
+    const p = playlist(); const i = p.songs.findIndex((s) => s.id === id); if (i < 0) return;
+    const s = p.songs[i];
+    const mid = state.selection ? state.selection.a : (s.start + s.end) / 2;
+    if (mid <= s.start + 1 || mid >= s.end - 1) { toast('Pick a split point inside the trimmed region first.'); return; }
+    const a = JSON.parse(JSON.stringify(s)), b = JSON.parse(JSON.stringify(s));
+    a.id = uid(); b.id = uid();
+    a.end = mid; a.title = s.title + ' (1)'; a.cuts = (s.cuts || []).filter((c) => c.end <= mid);
+    b.start = mid; b.title = s.title + ' (2)'; b.cuts = (s.cuts || []).filter((c) => c.start >= mid);
+    a.fadeOut = 0; b.fadeIn = 0; a.crossfade = 0;
+    p.songs.splice(i, 1, a, b);
+    state.currentSongId = a.id; state.selection = null;
+    save(); render();
+    toast('Split into two sections — drag them anywhere in the playlist.');
+  },
+  cutSelection(){
+    const s = songById(state.currentSongId); const sel = state.selection;
+    if (!s || !sel) { toast('Drag across the waveform to select a section first.'); return; }
+    const a = Math.min(sel.a, sel.b), b = Math.max(sel.a, sel.b);
+    if (b - a < 0.15) { toast('Selection is too short to remove.'); return; }
+    s.cuts = (s.cuts || []).concat([{ start: a, end: b }]);
+    if (songDuration(s) < 1){ s.cuts.pop(); toast('That would remove the whole track.'); return; }
+    state.selection = null; stopAll(); save(); render();
+    toast('Removed ' + fmt(b - a) + ' from the middle.');
+  },
+  clearCuts(){ const s = songById(state.currentSongId); if (!s) return; s.cuts = []; save(); render(); },
+  removeCut(i){ const s = songById(state.currentSongId); if (!s) return; s.cuts.splice(i, 1); save(); render(); },
+  resetTrim(){ const s = songById(state.currentSongId); if (!s) return; s.start = 0; s.end = s.duration; s.cuts = []; state.selection = null; save(); render(); },
+  applyToAll(){
+    const s = songById(state.currentSongId); const p = playlist(); if (!s || !p) return;
+    p.songs.forEach((o) => { if (o.id !== s.id){ o.fadeIn = s.fadeIn; o.fadeOut = s.fadeOut; o.volume = s.volume; o.normalize = s.normalize; o.eq = s.eq; } });
+    save(); toast('Audio settings copied to all ' + p.songs.length + ' songs.');
+  },
+  crossfadeAll(){
+    const p = playlist(); if (!p) return;
+    const s = p.songs[Math.min(state.transitionIndex, p.songs.length - 2)];
+    p.songs.forEach((o) => { o.crossfade = s.crossfade; o.curve = s.curve; });
+    save(); toast('Crossfade applied to every transition.');
+  },
+  openUpload(){ state.uploadOpen = true; state.uploadTab = 'file'; },
+  closeUpload(){ state.uploadOpen = false; },
+  setTab(t){ state.uploadTab = t; },
+  selectFormat(f){ state.exportFormat = f; state.exportState = 'idle'; state.exportResult = null; save(); },
+
+  async togglePlaySong(id){
+    const s = songById(id); if (!s) return;
+    if (state.player.kind === 'solo' && state.player.id === id) { stopAll(); render(); return; }
+    await playSolo(s, 0);
+  },
+  async previewTransition(){
+    const p = playlist(); if (!p || p.songs.length < 2) return;
+    if (state.player.kind === 'mix') { stopAll(); render(); return; }
+    const i = Math.min(state.transitionIndex, p.songs.length - 2);
+    const offs = mixOffsets(p.songs);
+    const cf = effectiveCrossfade(p.songs, i);
+    const from = Math.max(0, offs[i + 1] - Math.max(4, cf) - 2);
+    const until = offs[i + 1] + Math.max(4, cf) + 3;
+    state.player = { kind: 'mix', id: 'transition', pos: from, total: playlistDuration(p) };
+    await mixPlayer.start(p.songs, from, {
+      until,
+      onTick: (t) => { state.player.pos = t; paintProgress(); },
+    });
+    mixPlayer.onEnd = () => { stopAll(); render(); };
+    render();
+  },
+  async togglePlayMix(from){
+    const p = playlist(); if (!p || !p.songs.length) return;
+    if (state.player.kind === 'mix' && state.player.id === 'mix') { stopAll(); render(); return; }
+    const start = from != null ? from : 0;
+    state.player = { kind: 'mix', id: 'mix', pos: start, total: playlistDuration(p) };
+    await mixPlayer.start(p.songs, start, { onTick: (t) => { state.player.pos = t; paintProgress(); } });
+    mixPlayer.onEnd = () => { stopAll(); render(); };
+    render();
+  },
+  prevSong(){
+    const p = playlist(); if (!p || !p.songs.length) return;
+    const i = p.songs.findIndex((x) => x.id === state.activeSongId);
+    state.activeSongId = p.songs[(i - 1 + p.songs.length) % p.songs.length].id;
+    stopAll(); render();
+  },
+  nextSong(){
+    const p = playlist(); if (!p || !p.songs.length) return;
+    const i = p.songs.findIndex((x) => x.id === state.activeSongId);
+    state.activeSongId = p.songs[(i + 1) % p.songs.length].id;
+    stopAll(); render();
+  },
+
+  async startExport(){
+    const p = playlist(); if (!p || !p.songs.length) { toast('Add songs first.'); return; }
+    if (state.exportState === 'running') return;
+    stopAll();
+    state.exportState = 'running'; state.exportProgress = 0; state.exportLabel = 'Preparing'; state.exportResult = null;
+    render();
+    try {
+      const res = await exportMix(p.songs, state.exportFormat, (pct, label) => {
+        state.exportProgress = clamp(pct * 100, 0, 100);
+        state.exportLabel = label || '';
+        paintExportProgress();
+      });
+      const name = p.name.replace(/[^\w\-]+/g, '_').replace(/^_|_$/g, '') + '.' + res.ext;
+      state.exportResult = { blob: res.blob, name, size: res.blob.size, seconds: res.seconds };
+      state.exportState = 'done';
+    } catch (e){
+      state.exportState = 'idle';
+      toast(e.message, 6000);
+    }
+    render();
+  },
+  downloadExport(){
+    if (!state.exportResult) return;
+    download(state.exportResult.blob, state.exportResult.name);
+  },
+};
+
+/* ==========================================================================
+   Rendering
+   ========================================================================== */
+function bars(peaks, cls){
+  return peaks.map((h) => '<i style="height:' + Math.max(6, Math.round(h * 100)) + '%"></i>').join('');
+}
+function fileSize(bytes){
+  if (bytes > 1024 * 1024 * 1024) return (bytes / 1073741824).toFixed(2) + ' GB';
+  if (bytes > 1024 * 1024) return (bytes / 1048576).toFixed(1) + ' MB';
+  return Math.round(bytes / 1024) + ' KB';
+}
+const PLAY = '&#9654;', PAUSE = '&#10074;&#10074;';
+
+function viewDashboard(){
+  const cards = state.playlists.map((p) => {
+    const mini = makeWave(p.name, 24);
+    return '<div class="pl-card" data-act="openPlaylist" data-id="' + p.id + '">' +
+      '<div class="pl-mini">' + mini.map((h) => '<i style="height:' + Math.round(h * 100) + '%"></i>').join('') + '</div>' +
+      '<div style="font-family:Lora,serif;font-weight:600;font-size:17px" class="ell">' + esc(p.name) + '</div>' +
+      '<div style="font-size:12.5px;color:var(--muted);margin-top:6px">' + esc(p.date) + '</div>' +
+      '<div style="display:flex;gap:14px;margin-top:14px;font-size:12.5px;color:var(--muted)">' +
+        '<span>' + p.songs.length + ' songs</span><span>' + fmtLong(playlistDuration(p)) + '</span>' +
+      '</div>' +
+      '<div style="position:absolute;top:14px;right:14px;display:flex;gap:2px">' +
+        '<button class="icon-btn" data-act="renamePlaylist" data-id="' + p.id + '" data-stop="1" title="Rename">&#9998;</button>' +
+        '<button class="icon-btn" data-act="deletePlaylist" data-id="' + p.id + '" data-stop="1" title="Delete">&#10005;</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  return '<div style="max-width:980px;margin:0 auto;padding:48px 32px 80px">' +
+    '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:32px;gap:16px;flex-wrap:wrap">' +
+      '<div><div class="h1">Your Playlists</div><div class="sub">Build seamless wedding mixes, ready to export.</div></div>' +
+      '<button class="btn" data-act="newPlaylist">+ New Playlist</button>' +
+    '</div>' +
+    '<div class="grid-cards">' + cards +
+      '<div class="dashed" style="padding:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:150px;cursor:pointer;color:var(--muted)" data-act="newPlaylist">' +
+        '<div style="font-size:28px;font-weight:300;color:var(--accent)">+</div>' +
+        '<div style="font-size:13.5px;margin-top:4px">New Playlist</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="note" id="storage-note" style="margin-top:28px">Playlists and uploaded audio are saved in this browser only — no account, no server.</div>' +
+  '</div>';
+}
+
+/* show how much of the browser's storage quota the saved audio is using */
+async function paintStorage(){
+  const el = $('storage-note'); if (!el || !navigator.storage || !navigator.storage.estimate) return;
+  try {
+    const { usage, quota } = await navigator.storage.estimate();
+    const persisted = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+    el.innerHTML = 'Saved in this browser only — no account, no server. Using <b>' + fileSize(usage || 0) + '</b>' +
+      (quota ? ' of ~' + fileSize(quota) + ' available' : '') +
+      (persisted ? ' &middot; storage marked persistent' : ' &middot; the browser may clear this if space runs low') + '.';
+  } catch (e) {}
+}
+
+function viewEditor(){
+  const p = playlist();
+  const offs = mixOffsets(p.songs);
+  const rows = p.songs.map((s, i) => {
+    const playing = state.player.kind === 'solo' && state.player.id === s.id;
+    const cf = effectiveCrossfade(p.songs, i);
+    const cls = 'song-row' + (state.dragIndex === i ? ' dragging' : '') + (state.overIndex === i && state.dragIndex !== i ? ' over' : '');
+    return '<div>' +
+      '<div class="' + cls + '" draggable="true" data-row="' + i + '">' +
+        '<div style="color:var(--wave);font-size:16px;letter-spacing:2px">&#8942;&#8942;</div>' +
+        '<div style="width:26px;text-align:center;color:var(--muted);font-size:13px">' + (i + 1) + '</div>' +
+        '<button class="play-circle" data-act="togglePlaySong" data-id="' + s.id + '" data-stop="1">' + (playing ? PAUSE : PLAY) + '</button>' +
+        '<div style="flex:1 1 auto;min-width:0;cursor:pointer" data-act="openTrack" data-id="' + s.id + '">' +
+          '<div style="font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:8px"><span class="ell">' + esc(s.title) + '</span>' +
+            (s.demo ? '<span class="chip demo">demo tone</span>' : '') +
+            (s.cuts && s.cuts.length ? '<span class="chip">' + s.cuts.length + ' cut' + (s.cuts.length > 1 ? 's' : '') + '</span>' : '') +
+          '</div>' +
+          '<div style="font-size:12.5px;color:var(--muted)" class="ell">' + esc(s.artist) + '</div>' +
+        '</div>' +
+        '<div class="mini-wave">' + bars(s.peaks.slice(0, 40)) + '</div>' +
+        '<div style="width:56px;text-align:right;font-size:12.5px;color:var(--muted);flex:0 0 auto">' + fmt(songDuration(s)) + '</div>' +
+        '<div style="display:flex;gap:2px;flex:0 0 auto">' +
+          '<button class="icon-btn" data-act="duplicateSong" data-id="' + s.id + '" data-stop="1" title="Duplicate">&#8862;</button>' +
+          '<button class="icon-btn" data-act="removeSong" data-id="' + s.id + '" data-stop="1" title="Remove">&#10005;</button>' +
+        '</div>' +
+      '</div>' +
+      (i < p.songs.length - 1 ?
+        '<div class="connector" data-act="openTransition" data-i="' + i + '">' +
+          '<div class="line"></div><div class="pill">crossfade ' + (Math.round(cf * 10) / 10) + 's &middot; ' + esc(CURVES[s.curve] || s.curve) + '</div><div class="line"></div>' +
+        '</div>' : '') +
+    '</div>';
+  }).join('');
+
+  const empty = '<div class="dashed" style="padding:60px 20px;text-align:center;color:var(--muted)">' +
+    '<div style="font-size:14.5px">No songs yet. Add MP3 files to start building this playlist.</div>' +
+    '<button class="btn sm" style="margin-top:16px" data-act="openUpload">+ Add Songs</button></div>';
+
+  const mixPlaying = state.player.kind === 'mix' && state.player.id === 'mix';
+  return '<div style="max-width:900px;margin:0 auto;padding:40px 32px 140px">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:12px;flex-wrap:wrap">' +
+      '<div class="h2">Songs</div>' +
+      '<div style="display:flex;gap:8px">' +
+        (p.songs.length ? '<button class="btn sm ghost" data-act="togglePlayMix">' + (mixPlaying ? PAUSE + ' Stop' : PLAY + ' Play full mix') + '</button>' : '') +
+        '<button class="btn sm" data-act="openUpload">+ Add Songs</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="note" style="margin-bottom:22px">' + p.songs.length + ' songs &middot; ' + fmtLong(playlistDuration(p)) +
+      ' final mix &middot; ' + Math.max(0, p.songs.length - 1) + ' crossfades. Drag rows to reorder.</div>' +
+    (p.songs.length ? rows : empty) +
+  '</div>';
+}
+
+function viewTrack(){
+  const s = songById(state.currentSongId);
+  if (!s) return '<div style="padding:40px">Track not found. <span data-act="goSongs" style="cursor:pointer;color:var(--accent)">Back to songs</span></div>';
+  const startPct = (s.start / s.duration) * 100;
+  const endPct = (s.end / s.duration) * 100;
+  const playing = state.player.kind === 'solo' && state.player.id === s.id;
+
+  const cutEls = (s.cuts || []).map((c) =>
+    '<div class="cut" style="left:' + (c.start / s.duration * 100) + '%;width:' + ((c.end - c.start) / s.duration * 100) + '%"></div>').join('');
+  const sel = state.selection ?
+    '<div class="sel" style="left:' + (Math.min(state.selection.a, state.selection.b) / s.duration * 100) + '%;width:' +
+      (Math.abs(state.selection.b - state.selection.a) / s.duration * 100) + '%"></div>' : '';
+
+  const cutList = (s.cuts || []).length ?
+    '<div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
+      '<span class="note">Removed sections:</span>' +
+      s.cuts.map((c, i) => '<span class="chip" style="display:inline-flex;gap:6px;align-items:center">' + fmt(c.start) + '–' + fmt(c.end) +
+        '<b data-act="removeCut" data-i="' + i + '" style="cursor:pointer">&#10005;</b></span>').join('') +
+      '<span class="note" style="cursor:pointer;text-decoration:underline" data-act="clearCuts">clear all</span>' +
+    '</div>' : '';
+
+  const eqOpts = Object.keys(EQ_PRESETS).map((k) =>
+    '<option value="' + k + '"' + (s.eq === k ? ' selected' : '') + '>' + esc(EQ_PRESETS[k].label) + '</option>').join('');
+
+  return '<div style="max-width:860px;margin:0 auto;padding:40px 32px 140px">' +
+    '<div class="back" data-act="goSongs"><span>&larr;</span><span>Songs</span></div>' +
+    '<div style="font-family:Lora,serif;font-weight:700;font-size:25px">' + esc(s.title) + '</div>' +
+    '<div style="font-size:13.5px;color:var(--muted);margin-top:4px;margin-bottom:28px">' + esc(s.artist) +
+      ' &middot; full length ' + fmt(s.duration) + (s.demo ? ' &middot; synthesized demo audio' : '') + '</div>' +
+
+    '<div class="card" style="margin-bottom:22px">' +
+      '<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-bottom:10px">' +
+        '<span>Trim start <b id="lbl-start" style="color:var(--text)">' + fmt(s.start) + '</b></span>' +
+        '<span>Drag inside the wave to select a section</span>' +
+        '<span>Trim end <b id="lbl-end" style="color:var(--text)">' + fmt(s.end) + '</b></span>' +
+      '</div>' +
+      '<div class="wave-box" id="wave">' +
+        '<div class="wave-bars">' + bars(s.peaks) + '</div>' +
+        '<div class="veil" id="veil-a" style="left:0;width:' + startPct + '%"></div>' +
+        '<div class="veil" id="veil-b" style="right:0;width:' + (100 - endPct) + '%"></div>' +
+        cutEls + sel +
+        '<div class="playhead" id="wave-head" style="left:0;display:none"></div>' +
+        '<div class="handle" id="h-start" style="left:' + startPct + '%"></div>' +
+        '<div class="handle" id="h-end" style="left:' + endPct + '%"></div>' +
+      '</div>' +
+      cutList +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;gap:10px;flex-wrap:wrap">' +
+        '<div style="font-size:13px;color:var(--muted)">Trimmed length: <strong style="color:var(--text)" id="lbl-trimmed">' + fmt(songDuration(s)) + '</strong></div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+          '<button class="btn sm ghost" data-act="cutSelection">Remove selection</button>' +
+          '<button class="btn sm ghost" data-act="splitSong" data-id="' + s.id + '">Split here</button>' +
+          '<button class="btn sm ghost" data-act="resetTrim">Reset</button>' +
+          '<button class="btn sm" data-act="togglePlaySong" data-id="' + s.id + '">' + (playing ? PAUSE : PLAY) + ' Preview</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="grid2">' +
+      '<div class="card"><div class="lbl">Fade In &middot; <span id="lbl-fadeIn">' + s.fadeIn + '</span>s</div>' +
+        '<input type="range" min="0" max="10" step="0.5" value="' + s.fadeIn + '" data-slider="fadeIn" data-label="lbl-fadeIn"></div>' +
+      '<div class="card"><div class="lbl">Fade Out &middot; <span id="lbl-fadeOut">' + s.fadeOut + '</span>s</div>' +
+        '<input type="range" min="0" max="10" step="0.5" value="' + s.fadeOut + '" data-slider="fadeOut" data-label="lbl-fadeOut"></div>' +
+      '<div class="card"><div class="lbl">Volume &middot; <span id="lbl-volume">' + s.volume + '</span>%</div>' +
+        '<input type="range" min="0" max="100" step="1" value="' + s.volume + '" data-slider="volume" data-label="lbl-volume"></div>' +
+      '<div class="card"><div class="lbl">EQ Preset</div>' +
+        '<select data-select="eq" class="inp">' + eqOpts + '</select></div>' +
+    '</div>' +
+
+    '<div class="card" style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:16px 20px">' +
+      '<input type="checkbox" data-check="normalize"' + (s.normalize ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:var(--accent)">' +
+      '<div style="font-size:13.5px">Normalize volume to match the rest of the playlist</div>' +
+      '<button class="btn sm ghost" style="margin-left:auto" data-act="applyToAll">Apply audio settings to all songs</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function viewTransition(){
+  const p = playlist();
+  if (p.songs.length < 2) return '<div style="padding:40px">Add at least two songs to create a transition.</div>';
+  const i = Math.min(state.transitionIndex, p.songs.length - 2);
+  const a = p.songs[i], b = p.songs[i + 1];
+  const cf = effectiveCrossfade(p.songs, i);
+  const playing = state.player.kind === 'mix' && state.player.id === 'transition';
+
+  // overlap drawn to scale against a 12s window centred on the junction
+  const win = Math.max(12, cf * 1.8);
+  const wPct = (cf / win) * 100;
+  const leftPct = 50 - wPct / 2;
+  const waveA = a.peaks.slice(-34), waveB = b.peaks.slice(0, 34);
+
+  const curves = Object.keys(CURVES).map((c) =>
+    '<div class="' + (a.curve === c ? 'active' : '') + '" data-act="setCurve" data-c="' + c + '">' + CURVES[c] + '</div>').join('');
+
+  return '<div style="max-width:820px;margin:0 auto;padding:40px 32px 140px">' +
+    '<div class="back" data-act="goSongs"><span>&larr;</span><span>Songs</span></div>' +
+    '<div style="font-family:Lora,serif;font-weight:700;font-size:25px;margin-bottom:6px">Crossfade Transition</div>' +
+    '<div style="font-size:13.5px;color:var(--muted);margin-bottom:28px">' + esc(a.title) + ' &rarr; ' + esc(b.title) + '</div>' +
+
+    '<div class="card" style="margin-bottom:22px">' +
+      '<div style="position:relative;height:100px;background:var(--track);border-radius:8px;overflow:hidden;display:flex">' +
+        '<div style="width:50%;height:100%;display:flex;align-items:center;gap:2px;padding:0 4px">' +
+          waveA.map((h, k) => '<i style="flex:1 1 auto;border-radius:2px;background:var(--accent);opacity:' +
+            (k > waveA.length - 12 ? 0.45 : 1) + ';height:' + Math.round(h * 100) + '%"></i>').join('') + '</div>' +
+        '<div style="width:50%;height:100%;display:flex;align-items:center;gap:2px;padding:0 4px">' +
+          waveB.map((h, k) => '<i style="flex:1 1 auto;border-radius:2px;background:oklch(0.4 0.09 250);opacity:' +
+            (k < 12 ? 0.45 : 1) + ';height:' + Math.round(h * 100) + '%"></i>').join('') + '</div>' +
+        '<div style="position:absolute;top:0;bottom:0;left:' + leftPct + '%;width:' + wPct + '%;' +
+          'background:repeating-linear-gradient(45deg,rgba(0,0,0,.05),rgba(0,0,0,.05) 6px,transparent 6px,transparent 12px);' +
+          'border-left:1px dashed oklch(0.6 0.03 60);border-right:1px dashed oklch(0.6 0.03 60)"></div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:8px">' +
+        '<span style="color:var(--accent)">&#9679; ' + esc(a.title) + ' (fading out)</span>' +
+        '<span style="color:oklch(0.4 0.09 250)">&#9679; ' + esc(b.title) + ' (fading in)</span>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="grid2">' +
+      '<div class="card"><div class="lbl">Crossfade Duration &middot; <span id="lbl-crossfade">' + a.crossfade + '</span>s</div>' +
+        '<input type="range" min="0" max="10" step="0.5" value="' + a.crossfade + '" data-slider="crossfade" data-label="lbl-crossfade" data-target="' + a.id + '">' +
+        (cf < a.crossfade ? '<div class="note" style="margin-top:8px">Limited to ' + (Math.round(cf * 10) / 10) + 's — one of these tracks is too short.</div>' : '') +
+      '</div>' +
+      '<div class="card"><div class="lbl">Fade Curve</div><div class="seg">' + curves + '</div>' +
+        '<div class="note" style="margin-top:10px">Smooth keeps constant perceived loudness through the blend.</div></div>' +
+    '</div>' +
+
+    '<div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap">' +
+      '<button class="btn" data-act="previewTransition">' + (playing ? PAUSE + ' Stop' : PLAY + ' Preview Transition') + '</button>' +
+      '<button class="btn ghost" data-act="crossfadeAll">Apply to all transitions</button>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;margin-top:22px">' +
+      (i > 0 ? '<span class="note" style="cursor:pointer" data-act="openTransition" data-i="' + (i - 1) + '">&larr; previous transition</span>' : '<span></span>') +
+      (i < p.songs.length - 2 ? '<span class="note" style="cursor:pointer" data-act="openTransition" data-i="' + (i + 1) + '">next transition &rarr;</span>' : '<span></span>') +
+    '</div>' +
+  '</div>';
+}
+
+function viewExport(){
+  const p = playlist();
+  const total = playlistDuration(p);
+  const formats = [
+    { id: 'mp3-320', label: 'MP3 — 320 kbps', desc: 'Best quality, ideal for most DJ setups', bitrate: 320 },
+    { id: 'mp3-192', label: 'MP3 — 192 kbps', desc: 'Smaller file, standard quality', bitrate: 192 },
+    { id: 'wav',     label: 'WAV — 16-bit / 44.1 kHz', desc: 'Uncompressed, largest file, no encoder needed', bitrate: 1411 },
+  ];
+  const est = (b) => fileSize(b * 1000 * total / 8);
+  const rows = formats.map((f) =>
+    '<div class="radio-row' + (state.exportFormat === f.id ? ' on' : '') + '" data-act="selectFormat" data-f="' + f.id + '">' +
+      '<div class="dot">' + (state.exportFormat === f.id ? '<i></i>' : '') + '</div>' +
+      '<div style="flex:1"><div style="font-size:14px;font-weight:600">' + f.label + '</div>' +
+      '<div style="font-size:12px;color:var(--muted)">' + f.desc + '</div></div>' +
+      '<div class="note">~' + est(f.bitrate) + '</div>' +
+    '</div>').join('');
+
+  let action;
+  if (state.exportState === 'running'){
+    action = '<div class="card">' +
+      '<div style="font-size:13px;margin-bottom:10px;display:flex;justify-content:space-between">' +
+        '<span id="exp-label">' + esc(state.exportLabel || 'Rendering final mix') + '&hellip;</span>' +
+        '<span id="exp-pct">' + Math.round(state.exportProgress) + '%</span></div>' +
+      '<div style="height:8px;border-radius:4px;background:oklch(0.94 0.01 60);overflow:hidden">' +
+        '<div id="exp-bar" style="height:100%;background:var(--accent);width:' + state.exportProgress + '%;transition:width .2s"></div></div>' +
+      '<div class="note" style="margin-top:10px">Everything is rendered in this browser — nothing is uploaded anywhere.</div>' +
+    '</div>';
+  } else if (state.exportState === 'done' && state.exportResult){
+    action = '<div style="background:oklch(0.96 0.02 145);border:1px solid oklch(0.82 0.05 145);border-radius:14px;padding:20px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">' +
+      '<div><div style="font-size:14px;font-weight:600">' + esc(state.exportResult.name) + '</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + fileSize(state.exportResult.size) + ' &middot; ' +
+        fmtLong(state.exportResult.seconds) + ' &middot; ready to play at the wedding</div></div>' +
+      '<div style="display:flex;gap:8px"><button class="btn sm ghost" data-act="startExport">Re-render</button>' +
+      '<button class="btn sm dark" data-act="downloadExport">Download</button></div>' +
+    '</div>';
+  } else {
+    action = '<button class="btn" data-act="startExport"' + (p.songs.length ? '' : ' disabled') + '>Generate Export</button>';
+  }
+
+  return '<div style="max-width:760px;margin:0 auto;padding:40px 32px 140px">' +
+    '<div class="h2" style="margin-bottom:6px">Export Mix</div>' +
+    '<div style="font-size:13.5px;color:var(--muted);margin-bottom:28px">Renders one continuous file with every trim, cut, fade, EQ and crossfade applied.</div>' +
+    '<div class="card" style="margin-bottom:18px;display:flex;gap:28px;flex-wrap:wrap">' +
+      '<div><div style="font-size:12px;color:var(--muted)">Songs</div><div class="stat">' + p.songs.length + '</div></div>' +
+      '<div><div style="font-size:12px;color:var(--muted)">Total length</div><div class="stat">' + fmtLong(total) + '</div></div>' +
+      '<div><div style="font-size:12px;color:var(--muted)">Crossfades</div><div class="stat">' + Math.max(0, p.songs.length - 1) + '</div></div>' +
+    '</div>' +
+    '<div class="card" style="margin-bottom:22px">' +
+      '<div class="lbl" style="margin-bottom:14px">Export Format</div>' +
+      '<div style="display:flex;flex-direction:column;gap:10px">' + rows + '</div>' +
+    '</div>' + action +
+  '</div>';
+}
+
+function viewUpload(){
+  if (!state.uploadOpen) return '';
+  const fileTab = state.uploadTab === 'file';
+  return '<div class="overlay" data-act="closeUpload" data-bg="1"><div class="modal" data-stopclick="1">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">' +
+      '<div style="font-family:Lora,serif;font-weight:700;font-size:19px">Add Songs</div>' +
+      '<div style="cursor:pointer;color:var(--muted);font-size:16px" data-act="closeUpload">&#10005;</div></div>' +
+    '<div class="tabs">' +
+      '<div class="' + (fileTab ? 'active' : '') + '" data-act="setTab" data-t="file">Upload audio</div>' +
+      '<div class="' + (!fileTab ? 'active' : '') + '" data-act="setTab" data-t="yt">From URL</div>' +
+    '</div>' +
+    (fileTab ?
+      '<label class="drop" id="drop">' +
+        '<div style="font-size:26px;color:var(--accent)">&#8593;</div>' +
+        '<div style="font-size:13.5px">Drop audio files here or click to browse</div>' +
+        '<div class="note">MP3, WAV, M4A, FLAC, OGG &middot; decoded and stored in this browser only</div>' +
+        '<input type="file" accept="audio/*" multiple id="file-input" style="display:none">' +
+      '</label>'
+      :
+      '<div>' +
+        '<div class="note" style="margin-bottom:10px">Paste a link, get an MP3. Conversion runs on your own service ' +
+        '(a browser is not allowed to fetch audio from YouTube itself) — see <code>import-service/</code> to set it up.</div>' +
+        '<input type="text" class="inp" placeholder="Conversion service URL, e.g. https://your-service.example/import" value="' + esc(state.ytEndpoint) + '" data-field="ytEndpoint" style="margin-bottom:10px">' +
+        '<input type="text" class="inp" placeholder="https://youtube.com/watch?v=..." value="' + esc(state.ytUrl) + '" data-field="ytUrl" style="margin-bottom:14px">' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+          '<button class="btn sm" data-act="importFromUrl" data-mode="download">Convert &amp; Download MP3</button>' +
+          '<button class="btn sm ghost" data-act="importFromUrl" data-mode="add">Add straight to playlist</button>' +
+        '</div>' +
+        '<div class="note" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' +
+          'No service running? Convert the track with whatever tool you already use and add the MP3 on the ' +
+          '<b>Upload audio</b> tab — it behaves identically.</div>' +
+      '</div>') +
+  '</div></div>';
+}
+
+function viewMiniPlayer(){
+  const p = playlist();
+  if (!p || !p.songs.length) return '';
+  const active = songById(state.activeSongId) || p.songs[0];
+  const isMix = state.player.kind === 'mix';
+  const playing = state.player.kind && (isMix || state.player.id === active.id);
+  const total = isMix ? state.player.total : songDuration(active);
+  const pos = state.player.kind ? state.player.pos : 0;
+  const pct = total > 0 ? clamp(pos / total * 100, 0, 100) : 0;
+  const title = isMix ? p.name + ' — full mix' : active.title;
+  const sub = isMix ? p.songs.length + ' songs, crossfaded' : active.artist;
+  return '<div class="miniplayer">' +
+    '<div style="display:flex;align-items:center;gap:12px;width:220px;flex:0 0 auto">' +
+      '<div style="width:42px;height:42px;border-radius:8px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:16px;flex:0 0 auto">&#9835;</div>' +
+      '<div style="min-width:0"><div style="font-size:13px;font-weight:600" class="ell">' + esc(title) + '</div>' +
+      '<div style="font-size:11.5px;color:var(--muted)" class="ell">' + esc(sub) + '</div></div>' +
+    '</div>' +
+    '<button class="mp-round" data-act="prevSong" title="Previous">&#9664;&#9664;</button>' +
+    '<button class="mp-main" data-act="' + (isMix ? 'togglePlayMix' : 'togglePlaySong') + '" data-id="' + active.id + '">' + (playing ? PAUSE : PLAY) + '</button>' +
+    '<button class="mp-round" data-act="nextSong" title="Next">&#9654;&#9654;</button>' +
+    '<div class="bar" id="mp-bar" data-seek="1"><div id="mp-fill" style="width:' + pct + '%"></div></div>' +
+    '<div style="font-size:11.5px;color:var(--muted);width:96px;text-align:right;flex:0 0 auto" id="mp-time">' +
+      fmt(pos) + ' / ' + fmt(total) + '</div>' +
+    '<button class="btn sm ghost" data-act="togglePlayMix" style="flex:0 0 auto">' + (isMix ? 'Stop mix' : 'Full mix') + '</button>' +
+  '</div>';
+}
+
+function render(){
+  const inPl = state.screen !== 'dashboard' && playlist();
+  const p = playlist();
+  let main = '';
+  if (state.screen === 'dashboard' || !p) main = viewDashboard();
+  else if (state.screen === 'editor') main = viewEditor();
+  else if (state.screen === 'track') main = viewTrack();
+  else if (state.screen === 'transition') main = viewTransition();
+  else if (state.screen === 'export') main = viewExport();
+
+  const songsActive = ['editor', 'track', 'transition'].includes(state.screen);
+  $('root').innerHTML =
+    '<div class="app">' +
+      '<div class="topbar">' +
+        '<div class="logo" data-act="goDashboard"><div class="logo-mark">D</div><div class="logo-txt">Dania DJ</div></div>' +
+        (inPl ? '<div style="font-size:13px;color:var(--muted)" class="ell">' + esc(p.name) + '</div>' : '') +
+      '</div>' +
+      '<div class="body">' +
+        (inPl ?
+          '<div class="sidebar">' +
+            '<div><div style="font-family:Lora,serif;font-weight:600;font-size:17px;line-height:1.3">' + esc(p.name) + '</div>' +
+            '<div style="font-size:12px;color:var(--muted);margin-top:4px">' + esc(p.date) + '</div></div>' +
+            '<div style="display:flex;flex-direction:column;gap:4px">' +
+              '<div class="nav-item ' + (songsActive ? 'active' : '') + '" data-act="goSongs">Songs</div>' +
+              '<div class="nav-item ' + (state.screen === 'export' ? 'active' : '') + '" data-act="goExport">Export</div>' +
+            '</div>' +
+            '<div style="margin-top:auto;font-size:13px;color:var(--muted);cursor:pointer;padding:8px 10px" data-act="goDashboard">&larr; All Playlists</div>' +
+          '</div>' : '') +
+        '<div class="main">' + main + '</div>' +
+      '</div>' +
+      (inPl ? viewMiniPlayer() : '') +
+    '</div>';
+  save();   // every navigation also checkpoints where we are
+  $('layer').innerHTML = viewUpload() + (state.busy ?
+    '<div class="overlay"><div class="modal" style="width:320px;display:flex;align-items:center;gap:12px">' +
+      '<div class="spinner" style="border-color:rgba(0,0,0,.15);border-top-color:var(--accent)"></div>' +
+      '<div style="font-size:13.5px">' + esc(state.busy) + '</div></div></div>' : '');
+  wire();
+}
+
+/* fine-grained repaint during playback (avoids a full re-render 10x/sec) */
+function paintProgress(){
+  const isMix = state.player.kind === 'mix';
+  const p = playlist(); if (!p) return;
+  const total = isMix ? state.player.total : state.player.total;
+  const pct = total > 0 ? clamp(state.player.pos / total * 100, 0, 100) : 0;
+  const fill = $('mp-fill'); if (fill) fill.style.width = pct + '%';
+  const t = $('mp-time'); if (t) t.textContent = fmt(state.player.pos) + ' / ' + fmt(total);
+  const head = $('wave-head');
+  if (head && state.screen === 'track' && state.player.kind === 'solo'){
+    const s = songById(state.currentSongId);
+    if (s){
+      head.style.display = 'block';
+      head.style.left = ((s.start + state.player.pos) / s.duration * 100) + '%';
+    }
+  } else if (head) head.style.display = 'none';
+}
+function paintExportProgress(){
+  const b = $('exp-bar'); if (b) b.style.width = state.exportProgress + '%';
+  const p = $('exp-pct'); if (p) p.textContent = Math.round(state.exportProgress) + '%';
+  const l = $('exp-label'); if (l) l.textContent = (state.exportLabel || 'Rendering') + '…';
+}
+
+/* ==========================================================================
+   Event wiring
+   ========================================================================== */
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  const bg = e.target.closest('[data-bg]');
+  // a click inside the modal must not close it via the backdrop
+  if (bg && e.target.closest('[data-stopclick]') && el === bg) return;
+  if (!el) return;
+  const act = el.dataset.act;
+  e.stopPropagation();
+
+  switch (act){
+    case 'goDashboard': actions.goDashboard(); render(); break;
+    case 'openPlaylist': actions.openPlaylist(el.dataset.id); render(); break;
+    case 'newPlaylist': actions.newPlaylist(); render(); break;
+    case 'renamePlaylist': actions.renamePlaylist(el.dataset.id); render(); break;
+    case 'deletePlaylist': actions.deletePlaylist(el.dataset.id); break;
+    case 'goSongs': actions.goSongs(); render(); break;
+    case 'goExport': actions.goExport(); render(); break;
+    case 'openTrack': actions.openTrack(el.dataset.id); render(); break;
+    case 'openTransition': actions.openTransition(Number(el.dataset.i)); render(); break;
+    case 'duplicateSong': actions.duplicateSong(el.dataset.id); render(); break;
+    case 'removeSong': actions.removeSong(el.dataset.id); break;
+    case 'splitSong': actions.splitSong(el.dataset.id); break;
+    case 'cutSelection': actions.cutSelection(); break;
+    case 'clearCuts': actions.clearCuts(); break;
+    case 'removeCut': actions.removeCut(Number(el.dataset.i)); break;
+    case 'resetTrim': actions.resetTrim(); break;
+    case 'applyToAll': actions.applyToAll(); break;
+    case 'crossfadeAll': actions.crossfadeAll(); render(); break;
+    case 'openUpload': actions.openUpload(); render(); break;
+    case 'closeUpload': actions.closeUpload(); render(); break;
+    case 'setTab': actions.setTab(el.dataset.t); render(); break;
+    case 'selectFormat': actions.selectFormat(el.dataset.f); render(); break;
+    case 'togglePlaySong': actions.togglePlaySong(el.dataset.id); break;
+    case 'togglePlayMix': actions.togglePlayMix(); break;
+    case 'previewTransition': actions.previewTransition(); break;
+    case 'prevSong': actions.prevSong(); break;
+    case 'nextSong': actions.nextSong(); break;
+    case 'startExport': actions.startExport(); break;
+    case 'downloadExport': actions.downloadExport(); break;
+    case 'importFromUrl': importFromUrl(el.dataset.mode || 'download'); break;
+    case 'setCurve': {
+      const p = playlist(); const s = p.songs[Math.min(state.transitionIndex, p.songs.length - 2)];
+      s.curve = el.dataset.c; save(); render(); break;
+    }
+  }
+});
+
+function wire(){
+  // sliders: live label update, commit on release
+  document.querySelectorAll('[data-slider]').forEach((inp) => {
+    const key = inp.dataset.slider;
+    const lbl = inp.dataset.label ? $(inp.dataset.label) : null;
+    inp.addEventListener('input', () => {
+      if (lbl) lbl.textContent = inp.value;
+      const id = inp.dataset.target || state.currentSongId;
+      updateSong(id, { [key]: Number(inp.value) });
+    });
+    inp.addEventListener('change', () => { render(); });
+  });
+  const sel = document.querySelector('[data-select="eq"]');
+  if (sel) sel.addEventListener('change', () => { updateSong(state.currentSongId, { eq: sel.value }); stopAll(); render(); });
+  const chk = document.querySelector('[data-check="normalize"]');
+  if (chk) chk.addEventListener('change', () => { updateSong(state.currentSongId, { normalize: chk.checked }); render(); });
+
+  document.querySelectorAll('[data-field]').forEach((inp) => {
+    inp.addEventListener('input', () => { state[inp.dataset.field] = inp.value; if (inp.dataset.field === 'ytEndpoint') save(); });
+  });
+
+  // upload
+  const fi = $('file-input');
+  if (fi) fi.addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
+  const drop = $('drop');
+  if (drop){
+    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('hot'); }));
+    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('hot'); }));
+    drop.addEventListener('drop', (e) => { if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+  }
+
+  wireRows();
+  wireWaveform();
+  wireSeek();
+  paintProgress();
+  paintStorage();
+}
+
+/* drag-to-reorder */
+function wireRows(){
+  document.querySelectorAll('[data-row]').forEach((row) => {
+    const i = Number(row.dataset.row);
+    row.addEventListener('dragstart', (e) => { state.dragIndex = i; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(i)); } catch (err) {} row.classList.add('dragging'); });
+    row.addEventListener('dragend', () => { state.dragIndex = null; state.overIndex = null; render(); });
+    row.addEventListener('dragover', (e) => { e.preventDefault(); if (state.overIndex !== i){ document.querySelectorAll('.song-row.over').forEach((n) => n.classList.remove('over')); state.overIndex = i; row.classList.add('over'); } });
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const from = state.dragIndex;
+      state.dragIndex = null; state.overIndex = null;
+      if (from == null || from === i) { render(); return; }
+      const p = playlist();
+      const next = p.songs.slice();
+      const [moved] = next.splice(from, 1);
+      next.splice(i, 0, moved);
+      p.songs = next;
+      stopAll(); save(); render();
+    });
+  });
+}
+
+/* waveform: trim handles + selection drag */
+function wireWaveform(){
+  const box = $('wave'); if (!box) return;
+  const s = songById(state.currentSongId); if (!s) return;
+  const hs = $('h-start'), he = $('h-end'), va = $('veil-a'), vb = $('veil-b');
+  const pctOf = (clientX) => { const r = box.getBoundingClientRect(); return clamp((clientX - r.left) / r.width, 0, 1); };
+
+  const startDrag = (which) => (e) => {
+    e.preventDefault(); e.stopPropagation();
+    box.setPointerCapture && box.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      const t = pctOf(ev.clientX) * s.duration;
+      if (which === 'start') s.start = clamp(t, 0, s.end - 1);
+      else s.end = clamp(t, s.start + 1, s.duration);
+      hs.style.left = (s.start / s.duration * 100) + '%';
+      he.style.left = (s.end / s.duration * 100) + '%';
+      va.style.width = (s.start / s.duration * 100) + '%';
+      vb.style.width = (100 - s.end / s.duration * 100) + '%';
+      $('lbl-start').textContent = fmt(s.start);
+      $('lbl-end').textContent = fmt(s.end);
+      $('lbl-trimmed').textContent = fmt(songDuration(s));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      stopAll(); save(); render();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  hs.addEventListener('pointerdown', startDrag('start'));
+  he.addEventListener('pointerdown', startDrag('end'));
+
+  // drag across the body to select a region for removal / split
+  box.addEventListener('pointerdown', (e) => {
+    if (e.target === hs || e.target === he) return;
+    const a = pctOf(e.clientX) * s.duration;
+    state.selection = { a, b: a };
+    const move = (ev) => { state.selection.b = pctOf(ev.clientX) * s.duration; paintSelection(s); };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (Math.abs(state.selection.b - state.selection.a) < 0.1) state.selection = { a: state.selection.a, b: state.selection.a };
+      render();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  });
+  function paintSelection(song){
+    let el = box.querySelector('.sel');
+    if (!el){ el = document.createElement('div'); el.className = 'sel'; box.appendChild(el); }
+    const a = Math.min(state.selection.a, state.selection.b), b = Math.max(state.selection.a, state.selection.b);
+    el.style.left = (a / song.duration * 100) + '%';
+    el.style.width = ((b - a) / song.duration * 100) + '%';
+  }
+}
+
+/* click the mini-player bar to seek */
+function wireSeek(){
+  const bar = $('mp-bar'); if (!bar) return;
+  bar.addEventListener('click', async (e) => {
+    const r = bar.getBoundingClientRect();
+    const frac = clamp((e.clientX - r.left) / r.width, 0, 1);
+    const p = playlist(); if (!p || !p.songs.length) return;
+    if (state.player.kind === 'mix'){
+      // capture the target BEFORE stopping — stopAll() clears state.player
+      const target = frac * playlistDuration(p);
+      stopAll();
+      await actions.togglePlayMix(target);
+    } else {
+      const active = songById(state.activeSongId) || p.songs[0];
+      if (active) playSolo(active, frac);
+    }
+  });
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.code === 'Space'){ e.preventDefault();
+    if (state.player.kind) { stopAll(); render(); }
+    else if (state.screen === 'track') actions.togglePlaySong(state.currentSongId);
+    else actions.togglePlayMix();
+  }
+  if (e.key === 'Escape'){ if (state.uploadOpen){ state.uploadOpen = false; render(); } }
+});
+window.addEventListener('beforeunload', () => { try { localStorage.setItem(LS_KEY, JSON.stringify(serializable())); } catch (e) {} });
+
+/* ---------- boot ---------- */
+load();
+render();
+</script>
+</body>
+</html>
