@@ -808,7 +808,7 @@ function updateSong(id, patch){
    ========================================================================== */
 async function addFiles(files){
   const pl = playlist(); if (!pl) return;
-  const list = Array.from(files).filter((f) => f.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac|opus|webm|mp4)$/i.test(f.name));
+  const list = Array.from(files).filter((f) => f.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|oga|flac|opus|weba|webm|mp4|aiff?|caf)$/i.test(f.name));
   if (!list.length) { toast('No audio files found in that selection.'); return; }
   state.uploadOpen = false;
   state.busy = 'Importing 0/' + list.length; render();
@@ -1367,7 +1367,8 @@ function viewUpload(){
         '<div style="font-size:26px;color:var(--accent)">&#8593;</div>' +
         '<div style="font-size:13.5px">Drop audio files here or click to browse</div>' +
         '<div class="note">MP3, WAV, M4A, FLAC, OGG &middot; decoded and stored in this browser only</div>' +
-        '<input type="file" accept="audio/*" multiple id="file-input" style="display:none">' +
+        // iOS needs explicit extensions — bare audio/* greys out most files in the Files picker
+        '<input type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.opus,.flac,.aiff,.aif,.caf,.weba" multiple id="file-input" style="display:none">' +
       '</label>'
       :
       '<div>' +
