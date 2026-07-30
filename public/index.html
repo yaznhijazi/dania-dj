@@ -576,20 +576,9 @@ async function playSolo(song, fromFrac){
    ========================================================================== */
 const WINDOW = 20;   // seconds rendered per pass
 
-async function renderMixStreaming(songs, onChunk, onProgress){
-  const offsets = mixOffsets(songs);
-  const total = playlistDuration({ songs });
-  if (total <= 0) throw new Error('Nothing to export — this playlist has no audible audio.');
-
-  // pre-compute per-song envelope parameters (needs peak => needs decode)
-  const meta = [];
-  for (let i = 0; i < songs.length; i++){
-    onProgress && onProgress(i / songs.length * 0.35, 'Decoding ' + songs[i].title);
-    const entry = await songAudio(songs[i]);
-    const { fi, fo, dur } = fadeTimes(songs, i);
-    meta.push({ song: songs[i], peak: entry.peak, dur, fi, fo, base: baseGain(songs[i], entry.peak), t0: offsets[i] });
-  }
-
+/* Renders a set of placed songs — meta entries carry their own envelope and
+   start time, so this serves both the whole-mix and the single-track exports. */
+async function renderTimeline(meta, total, onChunk, onProgress){
   const totalFrames = Math.ceil(total * SR);
   let written = 0;
   while (written < totalFrames){
@@ -627,10 +616,38 @@ async function renderMixStreaming(songs, onChunk, onProgress){
     for (let j = 0; j < n; j++){ L[j] = clamp(L[j], -1, 1); R[j] = clamp(R[j], -1, 1); }  // safety limiter
     await onChunk(L, R, n);
     written += n;
-    onProgress && onProgress(0.35 + (written / totalFrames) * 0.6, 'Mixing');
+    onProgress && onProgress(written / totalFrames);
     await new Promise((r) => setTimeout(r, 0));   // yield so the UI paints
   }
   return { frames: totalFrames, seconds: total };
+}
+
+async function renderMixStreaming(songs, onChunk, onProgress){
+  const offsets = mixOffsets(songs);
+  const total = playlistDuration({ songs });
+  if (total <= 0) throw new Error('Nothing to export — this playlist has no audible audio.');
+
+  // pre-compute per-song envelope parameters (needs peak => needs decode)
+  const meta = [];
+  for (let i = 0; i < songs.length; i++){
+    onProgress && onProgress(i / songs.length * 0.35, 'Decoding ' + songs[i].title);
+    const entry = await songAudio(songs[i]);
+    const { fi, fo, dur } = fadeTimes(songs, i);
+    meta.push({ song: songs[i], peak: entry.peak, dur, fi, fo, base: baseGain(songs[i], entry.peak), t0: offsets[i] });
+  }
+  return renderTimeline(meta, total, onChunk, (p) => onProgress && onProgress(0.35 + p * 0.6, 'Mixing'));
+}
+
+/* One song on its own timeline: trim, cuts, EQ, volume and its own fade in/out.
+   Crossfade belongs to the mix, so a standalone track never inherits it. */
+async function renderSongStreaming(song, onChunk, onProgress){
+  const entry = await songAudio(song);
+  const dur = songDuration(song);
+  if (dur <= 0) throw new Error('"' + song.title + '" has no audio left after trimming.');
+  let fi = song.fadeIn, fo = song.fadeOut;
+  if (fi + fo > dur) { const k = dur / (fi + fo); fi *= k; fo *= k; }
+  const meta = [{ song, peak: entry.peak, dur, fi, fo, base: baseGain(song, entry.peak), t0: 0 }];
+  return renderTimeline(meta, dur, onChunk, onProgress);
 }
 
 function wavHeader(frames, channels, sampleRate, bits){
@@ -668,15 +685,15 @@ function loadLame(){
   return lamePromise;
 }
 
-async function exportMix(songs, format, onProgress){
+/* `render(onChunk, onProgress)` streams the audio; this wraps it in a container.
+   `seconds` is only needed up front for the WAV header. */
+async function encodeStream(format, seconds, render, onProgress){
   const parts = [];
   if (format === 'wav'){
-    const total = playlistDuration({ songs });
-    parts.push(wavHeader(Math.ceil(total * SR), 2, SR, 16));
-    const r = await renderMixStreaming(songs, async (L, R, n) => {
+    parts.push(wavHeader(Math.ceil(seconds * SR), 2, SR, 16));
+    const r = await render(async (L, R, n) => {
       parts.push(new Uint8Array(f32toI16(L, R, n).buffer));
     }, onProgress);
-    onProgress(1, 'Done');
     return { blob: new Blob(parts, { type: 'audio/wav' }), ext: 'wav', seconds: r.seconds };
   }
 
@@ -688,17 +705,113 @@ async function exportMix(songs, format, onProgress){
   const left = new Int16Array(1152), right = new Int16Array(1152);
   let fill = 0;
   const pushFrame = () => { const b = enc.encodeBuffer(left, right); if (b.length) parts.push(new Uint8Array(b)); fill = 0; };
-  const r = await renderMixStreaming(songs, async (L, R, n) => {
+  const r = await render(async (L, R, n) => {
     for (let i = 0; i < n; i++){
       left[fill]  = Math.round(clamp(L[i], -1, 1) * 32767);
       right[fill] = Math.round(clamp(R[i], -1, 1) * 32767);
       if (++fill === 1152) pushFrame();
     }
-  }, (p, l) => onProgress(p * 0.97, l));
+  }, (p, l) => onProgress && onProgress(p * 0.97, l));
   if (fill > 0){ left.fill(0, fill); right.fill(0, fill); pushFrame(); }
   const tail = enc.flush(); if (tail.length) parts.push(new Uint8Array(tail));
-  onProgress(1, 'Done');
   return { blob: new Blob(parts, { type: 'audio/mpeg' }), ext: 'mp3', seconds: r.seconds };
+}
+
+async function exportMix(songs, format, onProgress){
+  const res = await encodeStream(format, playlistDuration({ songs }),
+    (onChunk, prog) => renderMixStreaming(songs, onChunk, prog), onProgress);
+  onProgress(1, 'Done');
+  return res;
+}
+
+/* Every song as its own file, numbered so the playlist order survives the
+   filesystem, bundled into one zip because browsers cannot hand back a folder. */
+async function exportTracks(songs, format, folder, onProgress){
+  const total = songs.reduce((t, s) => t + songDuration(s), 0);
+  if (total <= 0) throw new Error('Nothing to export — this playlist has no audible audio.');
+  const pad = Math.max(2, String(songs.length).length);
+  const files = [];
+  for (let i = 0; i < songs.length; i++){
+    const s = songs[i];
+    const num = String(i + 1).padStart(pad, '0');
+    const res = await encodeStream(format, songDuration(s),
+      (onChunk, prog) => renderSongStreaming(s, onChunk, prog),
+      (p) => onProgress((i + clamp(p, 0, 1)) / songs.length * 0.93, 'Rendering ' + num + ' — ' + s.title));
+    files.push({ name: num + ' - ' + safeFileName(s.title) + '.' + res.ext, blob: res.blob });
+  }
+  onProgress(0.95, 'Packing folder');
+  const blob = await zipStore(files, folder);
+  return { blob, ext: 'zip', seconds: total, count: files.length };
+}
+
+/* ==========================================================================
+   Zip (store only) — the tracks are already compressed audio, so deflating
+   them would burn CPU for nothing and pull in a dependency we do not need.
+   ========================================================================== */
+let crcTable = null;
+function crc32(bytes){
+  if (!crcTable){
+    crcTable = new Uint32Array(256);
+    for (let i = 0; i < 256; i++){
+      let c = i;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      crcTable[i] = c >>> 0;
+    }
+  }
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = crcTable[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+/* strip what Windows, macOS and zip readers disagree about */
+function safeFileName(s){
+  return String(s || 'track').replace(/[\\/:*?"<>|\x00-\x1f]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80) || 'track';
+}
+function dosTime(d){
+  return { t: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1),
+           d: ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate() };
+}
+async function zipStore(files, folder){
+  const enc = new TextEncoder();
+  const now = dosTime(new Date());
+  const prefix = folder ? safeFileName(folder) + '/' : '';
+  const parts = [], central = [];
+  let offset = 0;
+
+  for (const f of files){
+    const nameBytes = enc.encode(prefix + f.name);          // UTF-8, flagged below
+    const data = new Uint8Array(await f.blob.arrayBuffer());
+    const crc = crc32(data);
+
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true);
+    lh.setUint16(6, 0x0800, true);                          // bit 11: names are UTF-8
+    lh.setUint16(8, 0, true);                               // method 0 = store
+    lh.setUint16(10, now.t, true); lh.setUint16(12, now.d, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+    lh.setUint16(26, nameBytes.length, true); lh.setUint16(28, 0, true);
+    parts.push(new Uint8Array(lh.buffer), nameBytes, data);
+
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+    ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, now.t, true); ch.setUint16(14, now.d, true);
+    ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+    ch.setUint16(28, nameBytes.length, true);
+    ch.setUint32(42, offset, true);
+    central.push(new Uint8Array(ch.buffer), nameBytes);
+
+    offset += 30 + nameBytes.length + data.length;
+    // the 32-bit offsets above cannot address past 4 GB, and zip64 is not worth
+    // carrying for a playlist — fail loudly rather than write a corrupt archive
+    if (offset > 0xFFFFFFFF) throw new Error('That folder is over 4 GB. Export as MP3 instead of WAV, or split the playlist.');
+  }
+
+  const cdSize = central.reduce((n, p) => n + p.length, 0);
+  const eo = new DataView(new ArrayBuffer(22));
+  eo.setUint32(0, 0x06054b50, true);
+  eo.setUint16(8, files.length, true); eo.setUint16(10, files.length, true);
+  eo.setUint32(12, cdSize, true); eo.setUint32(16, offset, true);
+  return new Blob(parts.concat(central, [new Uint8Array(eo.buffer)]), { type: 'application/zip' });
 }
 
 function download(blob, name){
@@ -731,6 +844,7 @@ let state = {
   player: { kind: null, id: null, pos: 0, total: 0 },
   selection: null,                          // {a,b} in source seconds, track editor
   exportState: 'idle', exportProgress: 0, exportLabel: '', exportFormat: 'mp3-320',
+  exportMode: 'mix',                        // 'mix' = one file, 'tracks' = numbered folder
   exportResult: null,
   busy: null,
 };
@@ -740,6 +854,7 @@ function serializable(){
     v: 1,
     playlists: state.playlists.map((p) => ({ id: p.id, name: p.name, date: p.date, songs: p.songs })),
     exportFormat: state.exportFormat,
+    exportMode: state.exportMode,
     ytEndpoint: state.ytEndpoint,
     // where the user was, so a refresh or a return visit lands in the same place
     ui: {
@@ -765,6 +880,7 @@ function load(){
   if (raw && Array.isArray(raw.playlists) && raw.playlists.length){
     state.playlists = raw.playlists;
     state.exportFormat = raw.exportFormat || 'mp3-320';
+    state.exportMode = raw.exportMode === 'tracks' ? 'tracks' : 'mix';
     state.ytEndpoint = raw.ytEndpoint || '';
     // rebuild anything the schema needs
     // strip the old synthesized sample tracks, and any playlist made only of them
@@ -965,6 +1081,7 @@ const actions = {
   closeUpload(){ state.uploadOpen = false; },
   setTab(t){ state.uploadTab = t; },
   selectFormat(f){ state.exportFormat = f; state.exportState = 'idle'; state.exportResult = null; save(); },
+  selectMode(m){ state.exportMode = m; state.exportState = 'idle'; state.exportResult = null; save(); },
 
   async togglePlaySong(id){
     const s = songById(id); if (!s) return;
@@ -1016,13 +1133,17 @@ const actions = {
     state.exportState = 'running'; state.exportProgress = 0; state.exportLabel = 'Preparing'; state.exportResult = null;
     render();
     try {
-      const res = await exportMix(p.songs, state.exportFormat, (pct, label) => {
+      const prog = (pct, label) => {
         state.exportProgress = clamp(pct * 100, 0, 100);
         state.exportLabel = label || '';
         paintExportProgress();
-      });
-      const name = exportBaseName(p).replace(/[\\/:*?"<>|]+/g, '_') + '.' + res.ext;
-      state.exportResult = { blob: res.blob, name, size: res.blob.size, seconds: res.seconds };
+      };
+      const base = exportBaseName(p).replace(/[\\/:*?"<>|]+/g, '_');
+      const res = state.exportMode === 'tracks'
+        ? await exportTracks(p.songs, state.exportFormat, base, prog)
+        : await exportMix(p.songs, state.exportFormat, prog);
+      state.exportResult = { blob: res.blob, name: base + '.' + res.ext, size: res.blob.size,
+                             seconds: res.seconds, count: res.count || 0 };
       state.exportState = 'done';
     } catch (e){
       state.exportState = 'idle';
@@ -1292,12 +1413,27 @@ function viewTransition(){
 
 function viewExport(){
   const p = playlist();
-  const total = playlistDuration(p);
+  // without the crossfade overlap, separate tracks add up to more than the mix
+  const total = state.exportMode === 'tracks'
+    ? p.songs.reduce((t, s) => t + songDuration(s), 0)
+    : playlistDuration(p);
   const formats = [
     { id: 'mp3-320', label: 'MP3 — 320 kbps', desc: 'Best quality, ideal for most DJ setups', bitrate: 320 },
     { id: 'mp3-192', label: 'MP3 — 192 kbps', desc: 'Smaller file, standard quality', bitrate: 192 },
     { id: 'wav',     label: 'WAV — 16-bit / 44.1 kHz', desc: 'Uncompressed, largest file, no encoder needed', bitrate: 1411 },
   ];
+  const tracks = state.exportMode === 'tracks';
+  const modes = [
+    { id: 'mix', label: 'One continuous mix', desc: 'A single file with every crossfade rendered in' },
+    { id: 'tracks', label: 'Numbered tracks (folder)', desc: 'Each song separately, named 01, 02, 03… so the order holds' },
+  ];
+  const modeRows = modes.map((m) =>
+    '<div class="radio-row' + (state.exportMode === m.id ? ' on' : '') + '" data-act="selectMode" data-m="' + m.id + '">' +
+      '<div class="dot">' + (state.exportMode === m.id ? '<i></i>' : '') + '</div>' +
+      '<div style="flex:1"><div style="font-size:14px;font-weight:600">' + m.label + '</div>' +
+      '<div style="font-size:12px;color:var(--muted)">' + m.desc + '</div></div>' +
+    '</div>').join('');
+
   const est = (b) => fileSize(b * 1000 * total / 8);
   const rows = formats.map((f) =>
     '<div class="radio-row' + (state.exportFormat === f.id ? ' on' : '') + '" data-act="selectFormat" data-f="' + f.id + '">' +
@@ -1321,7 +1457,9 @@ function viewExport(){
     action = '<div style="background:oklch(0.96 0.02 145);border:1px solid oklch(0.82 0.05 145);border-radius:14px;padding:20px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">' +
       '<div><div style="font-size:14px;font-weight:600">' + esc(state.exportResult.name) + '</div>' +
       '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + fileSize(state.exportResult.size) + ' &middot; ' +
-        fmtLong(state.exportResult.seconds) + ' &middot; ready to play at the wedding</div></div>' +
+        fmtLong(state.exportResult.seconds) + ' &middot; ' +
+        (state.exportResult.count ? state.exportResult.count + ' numbered tracks' : 'ready to play at the wedding') +
+      '</div></div>' +
       '<div style="display:flex;gap:8px"><button class="btn sm ghost" data-act="startExport">Re-render</button>' +
       '<button class="btn sm dark" data-act="downloadExport">Download</button></div>' +
     '</div>';
@@ -1330,22 +1468,33 @@ function viewExport(){
   }
 
   return '<div style="max-width:760px;margin:0 auto;padding:40px 32px 140px">' +
-    '<div class="h2" style="margin-bottom:6px">Export Mix</div>' +
-    '<div style="font-size:13.5px;color:var(--muted);margin-bottom:28px">Renders one continuous file with every trim, cut, fade, EQ and crossfade applied.</div>' +
+    '<div class="h2" style="margin-bottom:6px">' + (tracks ? 'Export Tracks' : 'Export Mix') + '</div>' +
+    '<div style="font-size:13.5px;color:var(--muted);margin-bottom:28px">' +
+      (tracks
+        ? 'Renders every song on its own, with its trims, cuts, fades and EQ applied.'
+        : 'Renders one continuous file with every trim, cut, fade, EQ and crossfade applied.') +
+    '</div>' +
     '<div class="card" style="margin-bottom:18px;display:flex;gap:28px;flex-wrap:wrap">' +
       '<div><div style="font-size:12px;color:var(--muted)">Songs</div><div class="stat">' + p.songs.length + '</div></div>' +
       '<div><div style="font-size:12px;color:var(--muted)">Total length</div><div class="stat">' + fmtLong(total) + '</div></div>' +
-      '<div><div style="font-size:12px;color:var(--muted)">Crossfades</div><div class="stat">' + Math.max(0, p.songs.length - 1) + '</div></div>' +
+      '<div><div style="font-size:12px;color:var(--muted)">' + (tracks ? 'Files' : 'Crossfades') + '</div>' +
+        '<div class="stat">' + (tracks ? p.songs.length : Math.max(0, p.songs.length - 1)) + '</div></div>' +
+    '</div>' +
+    '<div class="card" style="margin-bottom:22px">' +
+      '<div class="lbl" style="margin-bottom:14px">What to export</div>' +
+      '<div style="display:flex;flex-direction:column;gap:10px">' + modeRows + '</div>' +
+      (tracks ? '<div class="note" style="margin-top:12px">Crossfades are a property of the mix, so single tracks keep only their own fade in and out. ' +
+        'You get one .zip that unpacks into a folder.</div>' : '') +
     '</div>' +
     '<div class="card" style="margin-bottom:22px">' +
       '<div class="lbl" style="margin-bottom:14px">Export Format</div>' +
       '<div style="display:flex;flex-direction:column;gap:10px">' + rows + '</div>' +
     '</div>' +
     '<div class="card" style="margin-bottom:22px">' +
-      '<div class="lbl">File name</div>' +
+      '<div class="lbl">' + (tracks ? 'Folder name' : 'File name') + '</div>' +
       '<div style="display:flex;align-items:center;gap:8px">' +
         '<input type="text" class="inp" data-export-name value="' + esc(exportBaseName(p)) + '" placeholder="' + esc(defaultExportName(p)) + '" style="flex:1">' +
-        '<span class="note" style="flex:0 0 auto">.' + (state.exportFormat === 'wav' ? 'wav' : 'mp3') + '</span>' +
+        '<span class="note" style="flex:0 0 auto">.' + (tracks ? 'zip' : (state.exportFormat === 'wav' ? 'wav' : 'mp3')) + '</span>' +
       '</div>' +
     '</div>' + action +
   '</div>';
@@ -1519,6 +1668,7 @@ document.addEventListener('click', (e) => {
     case 'closeUpload': actions.closeUpload(); render(); break;
     case 'setTab': actions.setTab(el.dataset.t); render(); break;
     case 'selectFormat': actions.selectFormat(el.dataset.f); render(); break;
+    case 'selectMode': actions.selectMode(el.dataset.m); render(); break;
     case 'togglePlaySong': actions.togglePlaySong(el.dataset.id); break;
     case 'togglePlayMix': actions.togglePlayMix(); break;
     case 'previewTransition': actions.previewTransition(); break;
